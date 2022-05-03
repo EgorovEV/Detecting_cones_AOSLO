@@ -41,10 +41,12 @@ def calc_grad_field(img):
     grad_vector = np.stack((gx, gy), axis=2)
     return grad_vector
 
-def visualize(img_colorful, particles):
+def visualize(img_colorful, particles, is_save=False, img_name='test', save_dir='./examples/'):
     image_particles = img_colorful.copy()
     for particle in particles:
         # print((particle[0], particle[1]))
         cv2.circle(image_particles, (round(particle[0]), round(particle[1])), radius=1, color=(0, 255, 255), thickness=-1)
+    if is_save:
+        cv2.imwrite(save_dir+img_name+'.jpg', image_particles)
     cv2.imshow('img with particles', image_particles)
     cv2.waitKey()

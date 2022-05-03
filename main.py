@@ -50,7 +50,8 @@ R_b = np.divide( np.abs(eigs[0,:,:]), np.abs(eigs[1,:,:]) )
 blobness_grad = calc_grad_field(R_b)
 print(blobness_grad.shape)
 
-visualize(img_colorful, particles)
+visualize(img_colorful, particles, is_save=True,
+          img_name='start', save_dir='./examples/')
 lr = 1.
 lambda_dist = 0.5 * lr
 lambda_blob = 0.5 * lr
@@ -63,9 +64,11 @@ for i in range(2000):
         particle[1] = bicycle(particle[1])
 
     if i % 100 == 0:
-        visualize(img_colorful, particles)
+        visualize(img_colorful, particles, is_save=True,
+                  img_name='step_'+str(i), save_dir='./examples/')
 
-visualize(img_colorful, particles)
+visualize(img_colorful, particles, is_save=True,
+          img_name='finish', save_dir='./examples/')
 
 # if VERBOSE:
 # plt.imshow(R_b, cmap = 'gray')

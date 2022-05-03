@@ -23,7 +23,8 @@ python visualize_centers.py
 5. visualize current particle position.
 6. repeat step 4 M-times, every 100 updates perform step 5. 
 ### Also implemented
-* finding and calculating distance to N nearest particles
+* finding and calculating distance to N nearest particles.
+* writing visualization of algo results into ./examples dir.
 
 ### ToDo
 * Include distance to the algo

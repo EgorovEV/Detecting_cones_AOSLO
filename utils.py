@@ -1,7 +1,6 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import cv2
-import pandas as pd
+import numpy as np
+from scipy.optimize import linear_sum_assignment
 from scipy.spatial import distance_matrix
 
 
@@ -15,13 +14,13 @@ def metric():
     pass
 
 
-def calc_distances(particles, n_neighbours):
+def calc_distances(particles, GT_particles, n_neighbours):
     def get_particle_xy(idx):
         return particles[idx]
 
-    n_particles = particles.shape[0]
+    n_particles = GT_particles.shape[0]
     ### FIND NEAREST NEIGHBOURS, CALC DISTANCES ###
-    dist_matr = distance_matrix(particles, particles)
+    dist_matr = distance_matrix(GT_particles, particles)
     # return "n_neighbours" indexes. neigh_ind[i,j] - The index of j-closest element to element i
     neigh_ind = np.argsort(dist_matr, axis=1)[:, 1:n_neighbours + 1]
 
@@ -33,23 +32,23 @@ def calc_distances(particles, n_neighbours):
             top_dist_matr[particle_idx][idx_of_closest_neighbour] = dist_matr[particle_idx][cur_neighbour_idx]
 
             cur_neighbour_coord = particles[cur_neighbour_idx]
-            cur_particle_coord = particles[particle_idx]
+            cur_particle_coord = GT_particles[particle_idx]
             top_dist_vectors[particle_idx][idx_of_closest_neighbour] = cur_particle_coord - cur_neighbour_coord
 
     return top_dist_matr, top_dist_vectors
 
 
 def calc_dist_energy(particles, n_neighbours, alpha, sigma):
-    def exp_vector_norm(x,y):
+    def exp_vector_norm(x, y):
         return np.sqrt((x ** 2.) + (y ** 2.)) / (sigma ** 2.)
 
-    top_dist_matr, top_dist_vectors = calc_distances(particles, n_neighbours)
+    top_dist_matr, top_dist_vectors = calc_distances(particles, particles, n_neighbours)
 
     exp_resulting_vectors = np.zeros((top_dist_vectors.shape[0], 2))
     for vector_idx, neigh_vectors in enumerate(top_dist_vectors):
         directions = []
         for vector in neigh_vectors:
-            directions.append( vector / exp_vector_norm(*vector) )
+            directions.append(vector / exp_vector_norm(*vector))
         directions = np.asarray(directions)
         exp_resulting_vectors[vector_idx] = alpha * np.sum(directions, axis=0)
 
@@ -85,3 +84,26 @@ def visualize(img_colorful, particles, is_save=False, img_name='test', save_dir=
         cv2.imwrite(save_dir + img_name + '.jpg', image_particles)
     cv2.imshow('img with particles', image_particles)
     cv2.waitKey()
+
+
+def visualize_wandb(img_colorful, particles, color='r'):
+    color_map = {'r': (255, 0, 0),
+                 'g': (0, 255, 0),
+                 'b': (0, 0, 255),
+                 }
+    image_particles = img_colorful.copy()
+    for particle in particles:
+        cv2.circle(image_particles, (round(particle[0]), round(particle[1])), radius=1, color=color_map[color],
+                   thickness=-1)
+    return image_particles
+
+
+def calc_metrics(particles, GT_particles):
+    # top_dist_matr, _ = calc_distances(particles, GT_particles, n_neighbours=GT_particles.shape[0])
+    dist_matr = distance_matrix(GT_particles, particles)
+    # distances = np.sum(dist_matr, axis=1)
+    row_ind, col_ind = linear_sum_assignment(dist_matr)
+    return dist_matr[row_ind, col_ind], \
+           dist_matr[row_ind, col_ind].sum(), \
+           np.mean(dist_matr[row_ind, col_ind]), \
+           np.var(dist_matr[row_ind, col_ind])

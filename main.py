@@ -1,6 +1,4 @@
-import numpy as np
 import matplotlib.pyplot as plt
-import cv2
 import pandas as pd
 import skimage
 import wandb
@@ -30,7 +28,8 @@ if USE_WANDB:
 
 np.random.seed(random_seed)
 
-data = pd.read_csv('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.csv')
+GT_data = pd.read_csv('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.csv')
+GT_data = GT_data.to_numpy()
 img = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff', -1)
 img_colorful = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff')
 
@@ -46,7 +45,8 @@ if VERBOSE:
     plt.show()
 
 ### CREATE PARTICLE LOCATIONS ON IMG ###
-n_particles = 1000
+n_particles = 7700
+assert n_particles > GT_data.shape[0]
 particles = np.random.uniform(low=[0, 0], high=[img.shape[0], img.shape[1]], size=(n_particles, 2))
 
 ### SHOW PARTICLE LOCATIONS ON IMG ###
@@ -74,7 +74,7 @@ if VERBOSE:
     visualize(img_colorful, particles, is_save=True,
               img_name='start', save_dir='./examples/')
 
-for iteration in range(200):
+for iteration in range(50):
 
     exp_resulting_vectors, exp_resulting_vectors_modules = calc_dist_energy(particles,
                                                                             n_neighbours=dist_n_neighbours,
@@ -90,22 +90,38 @@ for iteration in range(200):
                        lambda_dist * exp_resulting_vectors[particle_idx][1]
         particle[1] = bicycle(particle[1])
 
-
-
     if USE_WANDB:
         blob_energy = calc_blob_energy(R_b, particles)
-        wandb.log({'step': iteration,
-                   'blob_energy_sum': np.sum(blob_energy),
-                   'blob_energy_mean': np.mean(blob_energy),
-                   'dist_energy_sum': np.sum(exp_resulting_vectors_modules),
-                   'dist_energy_mean': np.mean(exp_resulting_vectors_modules),
-                   'dist_energy_hist': exp_resulting_vectors_modules})
+
+        cur_situation = visualize_wandb(img_colorful, particles, color='r')
+        cur_and_GT_situation = visualize_wandb(cur_situation, GT_data, color='g')
+        particles_diff_visual = wandb.Image(cur_and_GT_situation, caption="all_particles_location")
+
+        logs = {'step': iteration,
+                'blob_energy_sum': np.sum(blob_energy),
+                'blob_energy_mean': np.mean(blob_energy),
+                'dist_energy_sum': np.sum(exp_resulting_vectors_modules),
+                'dist_energy_mean': np.mean(exp_resulting_vectors_modules),
+                'dist_energy': wandb.Histogram(exp_resulting_vectors_modules),
+                'Particles location. Green-GT, Red-particles': particles_diff_visual
+                }
+
+        if iteration % 5 == 0:
+            lsa, lsa_sum, lsa_mean, lsa_var = calc_metrics(particles, GT_data)
+            logs['linear_sum_assignment'] = wandb.Histogram(lsa)
+            logs['linear_sum_assignment_sum'] = lsa_sum
+            logs['linear_sum_assignment_mean'] = lsa_mean
+            logs['linear_sum_assignment_var'] = lsa_var
+        wandb.log(logs)
+
         # wandb.log({'step': iteration, 'blob_energy_mean': np.mean(blob_energy)})
         # wandb.log({'step': iteration, 'dist_energy': calc_dist_energy(particles, n_neighbours=1)})
     else:
-
         print('blob_energy= ', np.mean(calc_blob_energy(R_b, particles)))
         print('dist_energy= ', np.sum(exp_resulting_vectors_modules))
+        if iteration % 5 == 0:
+            lsa, lsa_sum, lsa_mean, lsa_var = calc_metrics(particles, GT_data)
+            print('lsa_sum, lsa_mean, lsa_var: ', lsa_sum, lsa_mean, lsa_var)
 
     if iteration % 100 == 0 and VERBOSE:
         visualize(img_colorful, particles, is_save=True,

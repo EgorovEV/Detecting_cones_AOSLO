@@ -1,136 +1,86 @@
-import matplotlib.pyplot as plt
 import pandas as pd
-import skimage
 import wandb
+from itertools import product
+from tqdm import tqdm
 
 from utils import *
+from pipeline import find_blobs
 
-VERBOSE = False
-USE_WANDB = True
+def grid_parameters(parameters):
+    for params in product(*parameters.values()):
+        yield dict(zip(parameters.keys(), params))
 
-random_seed = 2022
-lr = 1.
-lambda_dist = 0.5 * lr
-lambda_blob = 0.5 * lr
-dist_alpha, dist_sigma = 1., 1.
-dist_n_neighbours = 3
+def estimate_num_variant(parameters):
+    variants = 0
+    for params in product(*parameters.values()):
+        variants += 1
+    return variants
 
-if USE_WANDB:
-    wandb.init(project='cones_AOSLO', config={
-        'lr': lr,
-        'lambda_dist': lambda_dist,
-        'lambda_blob': lambda_blob,
-        'dist_alpha': dist_alpha,
-        'dist_sigma': dist_sigma,
-        'dist_n_neighbours': dist_n_neighbours,
-        'random_seed': random_seed,
-    })
-
-np.random.seed(random_seed)
 
 GT_data = pd.read_csv('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.csv')
 GT_data = GT_data.to_numpy()
 img = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff', -1)
 img_colorful = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff')
 
-### SHOW ORIGIN IMG ###
-if VERBOSE:
-    cv2.imshow('origin img', img)
-    cv2.waitKey()
 
-### CALC GRADINENT OVER IMG ###
-grad = calc_grad(img)
-if VERBOSE:
-    plt.imshow(grad, cmap='gray')
-    plt.show()
+config_zoo = {
+    'random_seed': [2022],
+    'lambda_dist': [0., 0.05, 0.01],
+    'lambda_blob': [0.01, 0.05, 0.1, 0.2],
+    'dist_alpha': [0.1, 0.3],
+    'dist_sigma': [0.1, 0.3],
+    'dist_n_neighbours': [1,2],
+    'region': [
+        # {
+        # 'x_min': 400,
+        # 'x_max': 428,
+        # 'y_min': 420,
+        # 'y_max': 445
+        # },
+        {
+        'x_min': 300,
+        'x_max': 328,
+        'y_min': 320,
+        'y_max': 345
+    }
+    ],
+    'boundary_size': [
+        {
+        'x': 1,
+        'y': 1
+        },
+        {
+        'x': 15,
+        'y': 15
+        }
+    ],
+    'epoch_num': [500],
+    'n_particles_coeff': [1., 1.25, 1.5, 1.75, 2.],
+    'metric_measure_freq': [100]
+}
 
-### CREATE PARTICLE LOCATIONS ON IMG ###
-n_particles = 7700
-assert n_particles > GT_data.shape[0]
-particles = np.random.uniform(low=[0, 0], high=[img.shape[0], img.shape[1]], size=(n_particles, 2))
+VERBOSE = False
+USE_WANDB = False # careful to use, not checked after changes!
 
-### SHOW PARTICLE LOCATIONS ON IMG ###
-if VERBOSE:
-    visualize(img_colorful, particles)
+if USE_WANDB:
+    wandb.init(project='cones_AOSLO', config=config_zoo)
 
-### GET PARTICLE DIST ENERGY ###
-n_neighbours = 2
-# particles_dist_energy = calc_dist_energy(particles, n_neighbours)
+print('Estimated num of variants:', estimate_num_variant(config_zoo))
 
-### GET PARTICLE BLOBNESS ENERGY ###
-hessian_m = skimage.feature.hessian_matrix(img, sigma=1, mode='constant', cval=0, order='rc')
-# eigs[i, j, k] contains the ith-largest eigenvalue at position (j, k).
-eigs = skimage.feature.hessian_matrix_eigvals(hessian_m)
-# pointwise division, multiplications
-# page 5(down) from "Multiscale Vessel Enhancement Filtering"
-# R_b - measure of "blobness"
-R_b = np.divide(np.abs(eigs[0, :, :]), np.abs(eigs[1, :, :]))
+results = []
 
-# calc grad of "Blobness field"
-blobness_grad = calc_grad_field(R_b)
-print(blobness_grad.shape)
+for cur_config in tqdm(grid_parameters(config_zoo)):
+    GT_data = pd.read_csv('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.csv')
+    GT_data = GT_data.to_numpy()
+    img = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff', -1)
+    img_colorful = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff')
+    try:
+        results.append( find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB) )
+    except Exception as error_type:
+        print('error occured', error_type)
 
-if VERBOSE:
-    visualize(img_colorful, particles, is_save=True,
-              img_name='start', save_dir='./examples/')
+# sorted_result = sorted(results, key=itemgetter('best_lsa_mean'))
 
-for iteration in range(50):
-
-    exp_resulting_vectors, exp_resulting_vectors_modules = calc_dist_energy(particles,
-                                                                            n_neighbours=dist_n_neighbours,
-                                                                            alpha=dist_alpha,
-                                                                            sigma=dist_sigma
-                                                                            )
-
-    for particle_idx, particle in enumerate(particles):
-        particle[0] += -1 * lambda_blob * blobness_grad[int(particle[0])][int(particle[1])][0] + \
-                       lambda_dist * exp_resulting_vectors[particle_idx][0]
-        particle[0] = bicycle(particle[0])  # to stay inside image borders
-        particle[1] += -1 * lambda_dist * blobness_grad[int(particle[0])][int(particle[1])][1] + \
-                       lambda_dist * exp_resulting_vectors[particle_idx][1]
-        particle[1] = bicycle(particle[1])
-
-    if USE_WANDB:
-        blob_energy = calc_blob_energy(R_b, particles)
-
-        cur_situation = visualize_wandb(img_colorful, particles, color='r')
-        cur_and_GT_situation = visualize_wandb(cur_situation, GT_data, color='g')
-        particles_diff_visual = wandb.Image(cur_and_GT_situation, caption="all_particles_location")
-
-        logs = {'step': iteration,
-                'blob_energy_sum': np.sum(blob_energy),
-                'blob_energy_mean': np.mean(blob_energy),
-                'dist_energy_sum': np.sum(exp_resulting_vectors_modules),
-                'dist_energy_mean': np.mean(exp_resulting_vectors_modules),
-                'dist_energy': wandb.Histogram(exp_resulting_vectors_modules),
-                'Particles location. Green-GT, Red-particles': particles_diff_visual
-                }
-
-        if iteration % 5 == 0:
-            lsa, lsa_sum, lsa_mean, lsa_var = calc_metrics(particles, GT_data)
-            logs['linear_sum_assignment'] = wandb.Histogram(lsa)
-            logs['linear_sum_assignment_sum'] = lsa_sum
-            logs['linear_sum_assignment_mean'] = lsa_mean
-            logs['linear_sum_assignment_var'] = lsa_var
-        wandb.log(logs)
-
-        # wandb.log({'step': iteration, 'blob_energy_mean': np.mean(blob_energy)})
-        # wandb.log({'step': iteration, 'dist_energy': calc_dist_energy(particles, n_neighbours=1)})
-    else:
-        print('blob_energy= ', np.mean(calc_blob_energy(R_b, particles)))
-        print('dist_energy= ', np.sum(exp_resulting_vectors_modules))
-        if iteration % 5 == 0:
-            lsa, lsa_sum, lsa_mean, lsa_var = calc_metrics(particles, GT_data)
-            print('lsa_sum, lsa_mean, lsa_var: ', lsa_sum, lsa_mean, lsa_var)
-
-    if iteration % 100 == 0 and VERBOSE:
-        visualize(img_colorful, particles, is_save=True,
-                  img_name='step_' + str(iteration), save_dir='./examples/')
-
-if VERBOSE:
-    visualize(img_colorful, particles, is_save=True,
-              img_name='finish', save_dir='./examples/')
-
-# if VERBOSE:
-# plt.imshow(R_b, cmap = 'gray')
-# plt.show()
+result_table = pd.DataFrame(results)
+result_table = result_table.sort_values('best_lsa_mean')
+result_table.to_csv("benchmarking.csv", index=False)

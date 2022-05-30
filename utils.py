@@ -1,14 +1,19 @@
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial import distance_matrix
 
 
-def bicycle(val, min_val=0, max_val=515):
-    val = val if val < max_val else max_val - 1.
-    val = val if val > min_val else min_val + 1
-    return val
 
+def GT_enumerate_from_zero(gt_data):
+    gt_data -= 1.
+    return gt_data
+
+def bicycle(particle_position, max_val, min_val=0):
+    particle_position = particle_position if particle_position < max_val else max_val - 1.
+    particle_position = particle_position if particle_position >= min_val else min_val + 1
+    return particle_position
 
 def metric():
     pass
@@ -52,7 +57,7 @@ def calc_dist_energy(particles, n_neighbours, alpha, sigma):
         directions = np.asarray(directions)
         exp_resulting_vectors[vector_idx] = alpha * np.sum(directions, axis=0)
 
-    exp_resulting_vectors_modules = np.linalg.norm(exp_resulting_vectors)
+    exp_resulting_vectors_modules = np.linalg.norm(exp_resulting_vectors, axis=1)
     return exp_resulting_vectors, exp_resulting_vectors_modules
 
 
@@ -69,33 +74,40 @@ def calc_grad(img):
 
 
 def calc_grad_field(img):
-    gx, gy = np.gradient(img)
-    grad_vector = np.stack((gx, gy), axis=2)
+    g_on_x_axis, g_on_y_axis = np.gradient(img)
+    grad_vector = np.stack((g_on_x_axis, g_on_y_axis), axis=2)
     return grad_vector
 
+def visualize(img, particles, GT_data, is_save=False, img_name='test', save_dir='./examples/'):
+    plt.imshow(img)
+    plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=0.4)
+    plt.scatter(particles[:,0], particles[:,1], color='g', linewidths=0.3)
+    plt.show()
 
-def visualize(img_colorful, particles, is_save=False, img_name='test', save_dir='./examples/'):
-    image_particles = img_colorful.copy()
-    for particle in particles:
-        # print((particle[0], particle[1]))
-        cv2.circle(image_particles, (round(particle[0]), round(particle[1])), radius=1, color=(0, 255, 255),
-                   thickness=-1)
-    if is_save:
-        cv2.imwrite(save_dir + img_name + '.jpg', image_particles)
-    cv2.imshow('img with particles', image_particles)
-    cv2.waitKey()
+def visualize_colorful(img_colorful, particles, is_save=False, img_name='test', save_dir='./examples/'):
+    pass
+    # image_particles = img_colorful.copy()
+    # for particle in particles:
+    #     # print((particle[0], particle[1]))
+    #     cv2.circle(image_particles, (round(particle[0]), round(particle[1])), radius=0, color=(0, 255, 255),
+    #                thickness=-1)
+    # if is_save:
+    #     cv2.imwrite(save_dir + img_name + '.jpg', image_particles)
+    # plt.imshow(image_particles)
+    # plt.show()
 
 
 def visualize_wandb(img_colorful, particles, color='r'):
-    color_map = {'r': (255, 0, 0),
-                 'g': (0, 255, 0),
-                 'b': (0, 0, 255),
-                 }
-    image_particles = img_colorful.copy()
-    for particle in particles:
-        cv2.circle(image_particles, (round(particle[0]), round(particle[1])), radius=1, color=color_map[color],
-                   thickness=-1)
-    return image_particles
+    pass
+    # color_map = {'r': (255, 0, 0),
+    #              'g': (0, 255, 0),
+    #              'b': (0, 0, 255),
+    #              }
+    # image_particles = img_colorful.copy()
+    # for particle in particles:
+    #     cv2.circle(image_particles, (round(particle[0]), round(particle[1])), radius=1, color=color_map[color],
+    #                thickness=-1)
+    # return image_particles
 
 
 def calc_metrics(particles, GT_particles):

@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial import distance_matrix
-
+from scipy import ndimage
 
 
 def GT_enumerate_from_zero(gt_data):
@@ -73,8 +73,16 @@ def calc_grad(img):
     return laplacian
 
 
-def calc_grad_field(img):
-    g_on_x_axis, g_on_y_axis = np.gradient(img)
+def calc_grad_field(img, grad_type):
+    if grad_type == 'np_grad':
+        g_on_x_axis, g_on_y_axis = np.gradient(img)
+    elif grad_type == 'sobel':
+        g_on_x_axis = ndimage.sobel(img,axis=0,mode='constant')
+        g_on_y_axis = ndimage.sobel(img,axis=1,mode='constant')
+    else:
+        raise AttributeError('grad_type {0} is not implemented'.format(grad_type))
+
+    g_on_y_axis = -g_on_y_axis
     grad_vector = np.stack((g_on_x_axis, g_on_y_axis), axis=2)
     return grad_vector
 

@@ -26,10 +26,10 @@ img_colorful = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_
 config_zoo = {
     'random_seed': [2022],
     'lambda_dist': [0., 0.05, 0.01],
-    'lambda_blob': [0.01, 0.05, 0.1, 0.2],
+    'lambda_blob': [0.05, 0.1, 0.2],
     'dist_alpha': [0.1, 0.3],
     'dist_sigma': [0.1, 0.3],
-    'dist_n_neighbours': [1,2],
+    'dist_n_neighbours': [1,2,6],
     'region': [
         # {
         # 'x_min': 400,
@@ -46,16 +46,17 @@ config_zoo = {
     ],
     'boundary_size': [
         {
-        'x': 1,
-        'y': 1
+        'x': 5,
+        'y': 5
         },
         {
         'x': 15,
         'y': 15
         }
     ],
+    'gradient_type': ['sobel','np_grad'],
     'epoch_num': [500],
-    'n_particles_coeff': [1., 1.25, 1.5, 1.75, 2.],
+    'n_particles_coeff': [1., 1.25, 1.5, 2.],
     'metric_measure_freq': [100]
 }
 

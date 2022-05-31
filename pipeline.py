@@ -51,16 +51,19 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
     R_b[R_b > threshold] = threshold
     R_b = R_b / threshold
 
-    if VERBOSE:
-        plt.imshow(R_b)
-        plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=0.3)
-        plt.show()
-    # print(R_b.shape)
-    # print(R_b)
-    # a=0/0
+    # if VERBOSE:
+    #     plt.imshow(R_b)
+    #     plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=0.3)
+    #     plt.show()
+
     # calc grad of "Blobness field"
-    blobness_grad = calc_grad_field(R_b)
-    # print(blobness_grad.shape)
+    blobness_grad = calc_grad_field(R_b, cur_config['gradient_type'])
+    if VERBOSE:
+        x, y = np.meshgrid(np.arange(blobness_grad.shape[1]), np.arange(blobness_grad.shape[0]))
+        plt.quiver(x, y, blobness_grad[:,:,1], blobness_grad[:,:,0])
+        plt.imshow(R_b, alpha=0.3)
+        plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=0.8)
+        plt.show()
 
     if VERBOSE:
         visualize(img, particles, GT_data, is_save=True,
@@ -167,8 +170,14 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
 
 
 if __name__ == '__main__':
-    cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.01, 'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345}, 'boundary_size': {'x': 15, 'y': 15}, 'epoch_num': 500, 'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
+    # cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.01, 'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345}, 'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 500, 'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
+    # cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.1, 'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345}, 'boundary_size': {'x': 5, 'y': 5}, 'gradient_type': 'np_grad', 'epoch_num': 500, 'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
+    # cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.05, 'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345}, 'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 500, 'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
 
+    cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.01, 'dist_alpha': 0.3, 'dist_sigma': 0.3,
+                  'dist_n_neighbours': 2, 'region': {'x_min': 0, 'x_max': 518, 'y_min': 0, 'y_max': 515},
+                  'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 500,
+                  'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
 
     GT_data = pd.read_csv('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.csv')
     GT_data = GT_data.to_numpy()

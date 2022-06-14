@@ -6,6 +6,10 @@ from tqdm import tqdm
 from utils import *
 from pipeline import find_blobs
 
+import warnings
+warnings.filterwarnings("ignore")
+print("##### WARNING TURNED OFF #####")
+
 def grid_parameters(parameters):
     for params in product(*parameters.values()):
         yield dict(zip(parameters.keys(), params))
@@ -25,11 +29,11 @@ img_colorful = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_
 
 config_zoo = {
     'random_seed': [2022],
-    'lambda_dist': [0., 0.05, 0.01],
-    'lambda_blob': [0.05, 0.1, 0.2],
-    'dist_alpha': [0.1, 0.3],
-    'dist_sigma': [0.1, 0.3],
-    'dist_n_neighbours': [1,2,6],
+    'lambda_dist': [0., 0.01, 0.05, 0.5],
+    'lambda_blob': [0.05, 0.1, 0.2, 0.5, 0.9, 1.5],
+    'dist_alpha': [0.3],
+    'dist_sigma': [0.3],
+    'dist_n_neighbours': [2],
     'region': [
         # {
         # 'x_min': 400,
@@ -46,18 +50,18 @@ config_zoo = {
     ],
     'boundary_size': [
         {
-        'x': 5,
-        'y': 5
-        },
-        {
         'x': 15,
         'y': 15
         }
     ],
-    'gradient_type': ['sobel','np_grad'],
+    'gradient_type': ['np_grad'],
     'epoch_num': [500],
-    'n_particles_coeff': [1., 1.25, 1.5, 2.],
-    'metric_measure_freq': [100]
+    'n_particles_coeff': [1., 1.5],
+    'metric_measure_freq': [10],
+    'step_mode': ['contin'], #discrete or contin
+    'blobness_formula': ['custom'],# 'simple_div', 'custom'
+    'write_gif': [False],
+    'metric_algo': ['Chamfer']
 }
 
 VERBOSE = False
@@ -84,4 +88,4 @@ for cur_config in tqdm(grid_parameters(config_zoo)):
 
 result_table = pd.DataFrame(results)
 result_table = result_table.sort_values('best_lsa_mean')
-result_table.to_csv("benchmarking.csv", index=False)
+result_table.to_csv("benchmarking_chamfer.csv", index=False)

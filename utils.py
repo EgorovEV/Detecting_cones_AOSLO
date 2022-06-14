@@ -4,7 +4,11 @@ import matplotlib.pyplot as plt
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial import distance_matrix
 from scipy import ndimage
+from sklearn.neighbors import NearestNeighbors
 
+
+def np_sigmoid(x):
+  return 1 / (1 + np.exp(-x))
 
 def GT_enumerate_from_zero(gt_data):
     gt_data -= 1.
@@ -20,9 +24,6 @@ def metric():
 
 
 def calc_distances(particles, GT_particles, n_neighbours):
-    def get_particle_xy(idx):
-        return particles[idx]
-
     n_particles = GT_particles.shape[0]
     ### FIND NEAREST NEIGHBOURS, CALC DISTANCES ###
     dist_matr = distance_matrix(GT_particles, particles)
@@ -89,7 +90,7 @@ def calc_grad_field(img, grad_type):
 def visualize(img, particles, GT_data, is_save=False, img_name='test', save_dir='./examples/'):
     plt.imshow(img)
     plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=0.4)
-    plt.scatter(particles[:,0], particles[:,1], color='g', linewidths=0.3)
+    plt.scatter(particles[:,0], particles[:,1], color='#00FFFF', linewidths=0.3)
     plt.show()
 
 def visualize_colorful(img_colorful, particles, is_save=False, img_name='test', save_dir='./examples/'):
@@ -117,13 +118,30 @@ def visualize_wandb(img_colorful, particles, color='r'):
     #                thickness=-1)
     # return image_particles
 
+def calc_dist_to_neares(p_from, p_to):
+    x_nn = NearestNeighbors(n_neighbors=1, leaf_size=1, algorithm='kd_tree', metric='l2').fit(p_from)
+    min_dists = x_nn.kneighbors(p_to)[0]
+    return min_dists
 
-def calc_metrics(particles, GT_particles):
+
+def calc_metrics(particles, GT_particles, mode='hangarian'):
     # top_dist_matr, _ = calc_distances(particles, GT_particles, n_neighbours=GT_particles.shape[0])
     dist_matr = distance_matrix(GT_particles, particles)
     # distances = np.sum(dist_matr, axis=1)
-    row_ind, col_ind = linear_sum_assignment(dist_matr)
-    return dist_matr[row_ind, col_ind], \
-           dist_matr[row_ind, col_ind].sum(), \
-           np.mean(dist_matr[row_ind, col_ind]), \
-           np.var(dist_matr[row_ind, col_ind])
+    if mode == 'hangarian':
+        row_ind, col_ind = linear_sum_assignment(dist_matr)
+        return dist_matr[row_ind, col_ind], \
+               dist_matr[row_ind, col_ind].sum(), \
+               np.mean(dist_matr[row_ind, col_ind]), \
+               np.var(dist_matr[row_ind, col_ind])
+
+    elif mode == 'Chamfer':
+        gt_to_particles = calc_dist_to_neares(p_from=particles, p_to=GT_particles)
+        particles_to_gt = calc_dist_to_neares(p_from=GT_particles, p_to=particles)
+        return (gt_to_particles, particles_to_gt), \
+                np.sum(gt_to_particles) + np.sum(particles_to_gt), \
+                np.mean(gt_to_particles) + np.mean(particles_to_gt), \
+                np.var(gt_to_particles) + np.var(particles_to_gt)
+    else:
+        raise ValueError
+

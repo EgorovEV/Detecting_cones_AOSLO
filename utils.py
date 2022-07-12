@@ -19,9 +19,6 @@ def bicycle(particle_position, max_val, min_val=0):
     particle_position = particle_position if particle_position >= min_val else min_val + 1
     return particle_position
 
-def metric():
-    pass
-
 
 def calc_distances(particles, GT_particles, n_neighbours):
     n_particles = GT_particles.shape[0]
@@ -43,7 +40,6 @@ def calc_distances(particles, GT_particles, n_neighbours):
 
     return top_dist_matr, top_dist_vectors
 
-
 def calc_dist_energy(particles, n_neighbours, alpha, sigma):
     def exp_vector_norm(x, y):
         return np.sqrt((x ** 2.) + (y ** 2.)) / (sigma ** 2.)
@@ -61,7 +57,6 @@ def calc_dist_energy(particles, n_neighbours, alpha, sigma):
     exp_resulting_vectors_modules = np.linalg.norm(exp_resulting_vectors, axis=1)
     return exp_resulting_vectors, exp_resulting_vectors_modules
 
-
 def calc_blob_energy(R_b, particles):
     blob_energy = np.zeros(particles.shape[0])
     for idx, (x_pos, y_pos) in enumerate(particles):
@@ -72,7 +67,6 @@ def calc_blob_energy(R_b, particles):
 def calc_grad(img):
     laplacian = cv2.Laplacian(img, cv2.CV_64F)
     return laplacian
-
 
 def calc_grad_field(img, grad_type):
     if grad_type == 'np_grad':
@@ -86,6 +80,7 @@ def calc_grad_field(img, grad_type):
     g_on_y_axis = -g_on_y_axis
     grad_vector = np.stack((g_on_x_axis, g_on_y_axis), axis=2)
     return grad_vector
+
 
 def visualize(img, particles, GT_data, is_save=False, img_name='test', save_dir='./examples/'):
     plt.imshow(img)
@@ -105,7 +100,6 @@ def visualize_colorful(img_colorful, particles, is_save=False, img_name='test', 
     # plt.imshow(image_particles)
     # plt.show()
 
-
 def visualize_wandb(img_colorful, particles, color='r'):
     pass
     # color_map = {'r': (255, 0, 0),
@@ -118,8 +112,12 @@ def visualize_wandb(img_colorful, particles, color='r'):
     #                thickness=-1)
     # return image_particles
 
-def calc_dist_to_neares(p_from, p_to):
-    x_nn = NearestNeighbors(n_neighbors=1, leaf_size=1, algorithm='kd_tree', metric='l2').fit(p_from)
+
+def calc_dist_to_neares(p_from, p_to, n_neighbours=1):
+    if n_neighbours == 1:
+        assert not (p_from[:,0] == p_to[:,0]).all()
+        assert not (p_from[:,1] == p_to[:,1]).all()
+    x_nn = NearestNeighbors(n_neighbors=n_neighbours, leaf_size=1, algorithm='kd_tree', metric='l2').fit(p_from)
     min_dists = x_nn.kneighbors(p_to)[0]
     return min_dists
 

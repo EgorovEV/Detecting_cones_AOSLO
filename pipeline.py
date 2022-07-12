@@ -5,6 +5,7 @@ import pandas as pd
 import skimage
 import wandb
 import imageio
+from PIL import Image
 from tqdm import tqdm
 
 from utils import *
@@ -44,6 +45,8 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
     hessian_m = skimage.feature.hessian_matrix(img, sigma=1, mode='constant', cval=0, order='rc')
     # eigs[i, j, k] contains the ith-largest eigenvalue at position (j, k).
     eigs = skimage.feature.hessian_matrix_eigvals(hessian_m)
+
+
     assert (eigs[0, :, :] > eigs[1, :, :]).all()
     # eigs = np_sigmoid(eigs)
 
@@ -62,13 +65,22 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
     # page 5(down) from "Multiscale Vessel Enhancement Filtering"
     # R_b - measure of "blobness"
 
-    # if VERBOSE:
-    #     x, y = np.meshgrid(np.arange(eigs[0, :, :].shape[1]), np.arange(eigs[0, :, :].shape[0]))
-    #     plt.quiver(x, y, eigs[0, :, :], eigs[0, :, :])
-    #     plt.imshow(eigs[0, :, :], alpha=0.3)
-    #     plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=0.8)
-    #     plt.show()
-    #
+    ######## EIGENVALUES VISUALISATION ###########
+    # x, y = np.meshgrid(np.arange(eigs[0, :, :].shape[1]), np.arange(eigs[0, :, :].shape[0]))
+    # # plt.quiver(x, y, eigs[0, :, :], eigs[0, :, :])
+    # plt.imshow(eigs[0, :, :], alpha=0.3)
+    # plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=2.8)
+    # plt.title('Lambda 1')
+
+    ######## EIGENVALUES VISUALISATION ###########
+    # fig, axis = plt.subplots()  # il me semble que c'est une bonne habitude de faire supbplots
+    # heatmap = axis.pcolor(eigs[0, :, :], cmap=plt.cm.YlGn)
+    # plt.scatter(GT_data[:, 0]+0.5, GT_data[:, 1]+0.5, color='r', linewidths=2.8)
+    # plt.colorbar(heatmap)
+    # plt.title('Lambda 1')
+    # plt.show()
+
+#
     # if VERBOSE:
     #     x, y = np.meshgrid(np.arange(eigs[1, :, :].shape[1]), np.arange(eigs[1, :, :].shape[0]))
     #     plt.quiver(x, y, eigs[1, :, :], eigs[1, :, :])
@@ -76,6 +88,10 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
     #     plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=0.8)
     #     plt.show()
 
+    if VERBOSE:
+        plt.imshow(img)
+        plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=2.8)
+        plt.show()
 
     if cur_config['blobness_formula'] == 'simple_div':
         R_b = np.divide(np.abs(eigs[0, :, :]), np.abs(eigs[1, :, :]))
@@ -86,11 +102,20 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
         R_b = R_b / threshold
 
     elif cur_config['blobness_formula'] == 'custom':
-        R_b = eigs[1, :, :] - eigs[0, :, :] + (np_sigmoid(-eigs[0, :, :]) + -eigs[0, :, :] * 100)
+        R_b = eigs[1, :, :] - eigs[0, :, :] + (np_sigmoid(-eigs[0, :, :])*10.)# + -eigs[0, :, :] * 100)
+
+    elif cur_config['blobness_formula'] == 'div_corrected':
+        idx_pos_l0 = [eigs[0, :, :] > 0.]
+        idx_pos_l1 = [eigs[1, :, :] > 0.]
+        idx_pos = idx_pos_l0 or idx_pos_l1
+        max_abs_eigs = np.maximum(np.abs(eigs[0, :, :]), np.abs(eigs[1, :, :]))
+        min_abs_eigs = np.minimum(np.abs(eigs[0, :, :]), np.abs(eigs[1, :, :]))
+        R_b = np.divide(min_abs_eigs, max_abs_eigs)
+        R_b[idx_pos] = 0.
+        assert (R_b<1.0001).all()
+        assert (R_b>-0.0001).all()
     else:
         raise NotImplementedError
-
-
 
     # if VERBOSE:
     #     plt.imshow(R_b)
@@ -103,7 +128,7 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
         x, y = np.meshgrid(np.arange(blobness_grad.shape[1]), np.arange(blobness_grad.shape[0]))
         plt.quiver(x, y, -blobness_grad[:,:,1], -blobness_grad[:,:,0])
         plt.imshow(R_b, alpha=0.3)
-        plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=0.8)
+        plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=2.8)
         plt.show()
 
     if VERBOSE:
@@ -157,9 +182,9 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
         if USE_WANDB:
             blob_energy = calc_blob_energy(R_b, particles)
 
-            cur_situation = visualize_wandb(img_colorful, particles, color='r')
-            cur_and_GT_situation = visualize_wandb(cur_situation, GT_data, color='g')
-            particles_diff_visual = wandb.Image(cur_and_GT_situation, caption="all_particles_location")
+            # cur_situation = visualize_wandb(img_colorful, particles, color='r')
+            # cur_and_GT_situation = visualize_wandb(cur_situation, GT_data, color='g')
+            # particles_diff_visual = wandb.Image(cur_and_GT_situation, caption="all_particles_location")
 
             logs = {'step': iteration,
                     'blob_energy': wandb.Histogram(blob_energy),
@@ -167,13 +192,13 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
                     'blob_energy_mean': np.mean(blob_energy),
                     'dist_energy_sum': np.sum(exp_resulting_vectors_modules),
                     'dist_energy_mean': np.mean(exp_resulting_vectors_modules),
-                    'dist_energy': wandb.Histogram(exp_resulting_vectors_modules),
-                    'Particles location. Green-GT, Red-particles': particles_diff_visual
+                    # 'dist_energy': wandb.Histogram(exp_resulting_vectors_modules),
+                    # 'Particles location. Green-GT, Red-particles': particles_diff_visual
                     }
 
-            if iteration % 5 == 0:
-                lsa, lsa_sum, lsa_mean, lsa_var = calc_metrics(particles, GT_data)
-                logs['linear_sum_assignment'] = wandb.Histogram(lsa)
+            if iteration % 1 == 0:
+                lsa, lsa_sum, lsa_mean, lsa_var = calc_metrics(particles, GT_data, mode=cur_config['metric_algo'])
+                # logs['linear_sum_assignment'] = wandb.Histogram(lsa)
                 logs['linear_sum_assignment_sum'] = lsa_sum
                 logs['linear_sum_assignment_mean'] = lsa_mean
                 logs['linear_sum_assignment_var'] = lsa_var
@@ -202,14 +227,37 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
                                                                                lsa_mean,
                                                                                lsa_var),
                                     dpi=100)
+                        plt.clf()
                 elif VERBOSE:
                     plt.show()
 
     if cur_config['write_gif']:
-        with imageio.get_writer('mygif.gif', mode='I') as writer:
-            for filename in os.listdir('./img_log/'):
+
+        # images = []
+        # import matplotlib.image as mpimg
+        #
+        # img = ('image_name.png')
+        #
+        # for filename in os.listdir('./img_log/'):
+        #     im = Image.open('./img_log/'+filename)
+        #     images.append(im)
+        #
+        # images[0].save(
+        #     "output.gif",
+        #     format="GIF",
+        #     save_all=True,
+        #     loop=0,
+        #     append_images=images,
+        #     duration=40,
+        #     disposal=3
+        # )
+
+        with imageio.get_writer('mygif.gif', mode='I', fps=1) as writer:
+            for filename in sorted(os.listdir('./img_log/')):
                 image = imageio.v2.imread('img_log/'+filename)
-                writer.append_data(image)
+                writer.append_data(image[:,:,:3])
+                # print(image.shape)
+
 
 
 
@@ -233,13 +281,15 @@ if __name__ == '__main__':
     #               'dist_n_neighbours': 2, 'region': {'x_min': 0, 'x_max': 518, 'y_min': 0, 'y_max': 515},
     #               'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 50,
     #               'n_particles_coeff': 2.0, 'metric_measure_freq': 10, 'n_particles': 52}
-    cur_config = {'random_seed': 2022, 'lambda_dist': 0.00, 'lambda_blob': 0.05, 'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2,
-                  'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
-                  'boundary_size': {'x': 15, 'y': 15},
+    cur_config = {'random_seed': 2022, 'lambda_dist': 1., 'lambda_blob': 0.6,
+                  'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2,
+                  # 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
+                  'region': {'x_min': 0, 'x_max': 518, 'y_min': 0, 'y_max': 515},
+                  'boundary_size': {'x': 10, 'y': 10},
                   'gradient_type': 'np_grad',
-                  'epoch_num': 10, 'n_particles_coeff': 1.0, 'metric_measure_freq': 1,
-                  'step_mode': 'discrete', #discrete or contin
-                  'blobness_formula': 'custom',# 'simple_div', 'custom'
+                  'epoch_num': 30, 'n_particles_coeff': 1.0, 'metric_measure_freq': 1,
+                  'step_mode': 'contin', #discrete or contin
+                  'blobness_formula': 'custom',# 'simple_div', 'custom', 'div_corrected'
                   'write_gif': False,
                   'metric_algo': 'Chamfer'
                   }
@@ -251,7 +301,10 @@ if __name__ == '__main__':
     img = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff', -1)
     img_colorful = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff')
 
-    VERBOSE = True
-    USE_WANDB = False
+    VERBOSE = False
+    USE_WANDB = True
+
+    if USE_WANDB:
+        wandb.init(project='cones_AOSLO', config=cur_config)
 
     find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB)

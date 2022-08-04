@@ -187,7 +187,7 @@ def calc_metrics(particles, GT_particles, mode='hangarian'):
         raise ValueError
 
 
-def update_particles(particles, R_b, threshold_dist=2.):
+def del_close_particles(particles, R_b, threshold_dist=2., is_return_del_idx=False):
     min_dists, indexes = calc_dist_to_neares(particles, particles, n_neighbours=2, return_indexes=True)
     dist_to_nearest_particle = min_dists[:, 1]
     to_delete = {idx: False for idx in range(particles.shape[0])}
@@ -212,9 +212,12 @@ def update_particles(particles, R_b, threshold_dist=2.):
         if not is_delete:
             new_particles[particle_idx] = particles[idx][:]
             particle_idx += 1
-    print("Old #particles={}, new #particles={}".format(particles.shape, new_particles.shape))
+    print("Delete #particles=", particles.shape[0] - new_particles.shape[0])
     # del particles
-    return new_particles
+    if is_return_del_idx:
+        return new_particles, to_delete
+    else:
+        return new_particles
 
 def is_particle_here(particles, x, y):
     for particle in particles:
@@ -261,22 +264,40 @@ def adding_particles(particles, gravity_field, img_shape, cur_config):
             argmin_grav_in_window = np.unravel_index(gravity_field[pix_y:pix_y+step, pix_x:pix_x+step].argmin(),
                                                      gravity_field[pix_y:pix_y+step, pix_x:pix_x+step].shape)
 
-            print('window: ', gravity_field[pix_y:pix_y+step, pix_x:pix_x+step],
-                  'y1y2, x1x2:', pix_y,pix_y+step, pix_x,pix_x+step,
-                  'argmin_grav_in_window', argmin_grav_in_window)
+            # print('window: ', gravity_field[pix_y:pix_y+step, pix_x:pix_x+step],
+            #       'y1y2, x1x2:', pix_y,pix_y+step, pix_x,pix_x+step,
+            #       'argmin_grav_in_window', argmin_grav_in_window)
 
             min_grav_in_window = gravity_field[pix_y + argmin_grav_in_window[0], pix_x + argmin_grav_in_window[1]]
-            print('min_grav=', min_grav_in_window)
+            # print('min_grav=', min_grav_in_window)
             if min_grav_in_window < cur_config['particle_call_threshold']:
                 particles = np.vstack((particles, np.array([pix_x + argmin_grav_in_window[1], pix_y + argmin_grav_in_window[0]])))
                 particles_added += 1
     print('Particle Added:', particles_added)
-    # print("particles shape:", particles.shape)
-    xx, yy = np.meshgrid(np.arange(gravity_field.shape[1]), np.arange(gravity_field.shape[0]))
-    # plt.quiver(x, y, -blobness_grad[:, :, 1], -blobness_grad[:, :, 0], )
-    plt.imshow(gravity_field, alpha=0.3)
-    plt.scatter(particles[-particles_added:, 0], particles[-particles_added:, 1], color='r', linewidths=0.8)
-    plt.scatter(particles[:-particles_added-1, 0], particles[:-particles_added-1, 1], color='#00FFFF', linewidths=0.8)
-    plt.show()
+    # # print("particles shape:", particles.shape)
+    # xx, yy = np.meshgrid(np.arange(gravity_field.shape[1]), np.arange(gravity_field.shape[0]))
+    # # plt.quiver(x, y, -blobness_grad[:, :, 1], -blobness_grad[:, :, 0], )
+    # plt.imshow(gravity_field, alpha=0.3)
+    # plt.scatter(particles[-particles_added:, 0], particles[-particles_added:, 1], color='r', linewidths=0.8)
+    # plt.scatter(particles[:-particles_added-1, 0], particles[:-particles_added-1, 1], color='#00FFFF', linewidths=0.8)
+    # plt.show()
+    return particles
 
+def initialize_high_prop_location(blobness_grad, init_blob_threshold, img_shape, cur_config):
+    # take only from cur image
+    origin_img_borders = {'y': [cur_config['boundary_size']['y'], img_shape[0] - cur_config['boundary_size']['y']],
+                          'x': [cur_config['boundary_size']['x'], img_shape[1] - cur_config['boundary_size']['x']]}
 
+    # print('borders:', origin_img_borders['y'][0], origin_img_borders['y'][1],origin_img_borders['x'][0], origin_img_borders['x'][1])
+
+    origin_img_grad = blobness_grad[origin_img_borders['y'][0]:origin_img_borders['y'][1],
+                                    origin_img_borders['x'][0]:origin_img_borders['x'][1]]
+    # init in place with prob > current
+    all_y, all_x = np.where(origin_img_grad > init_blob_threshold)
+    all_y += cur_config['boundary_size']['y']
+    all_x += cur_config['boundary_size']['x']
+
+    particles = np.vstack((all_x, all_y)).T
+    print('Starting particles:', particles.shape)
+
+    return particles

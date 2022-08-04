@@ -38,6 +38,8 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
     particles = np.random.uniform(low=[cur_config['boundary_size']['x'], cur_config['boundary_size']['y']],
                                   high=[img.shape[1] - cur_config['boundary_size']['x'], img.shape[0] - cur_config['boundary_size']['y']],
                                   size=(cur_config['n_particles'], 2))
+
+
     if cur_config['step_mode'] == 'discrete':
         particles = np.round(particles) #+ 0.5
 
@@ -117,10 +119,13 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
     else:
         raise NotImplementedError
 
-    # if VERBOSE:
-    #     plt.imshow(R_b)
-    #     plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=0.3)
-    #     plt.show()
+    ### Normilize (now it's obligation, because we need to somehow has stable init treshold
+    # <here>
+
+    if VERBOSE:
+        plt.imshow(R_b)
+        plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=0.3)
+        plt.show()
 
     # calc grad of "Blobness field"
     blobness_grad = calc_grad_field(R_b, cur_config['gradient_type'])
@@ -135,8 +140,25 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
         visualize(img, particles, GT_data, is_save=True,
                   img_name='start', save_dir='./examples/')
 
+    # starting initialization
+    particles = initialize_high_prop_location(R_b,
+                                              init_blob_threshold=cur_config['init_blob_threshold'],
+                                              img_shape=img.shape,
+                                              cur_config=cur_config)
+
+    while True:
+        particles, idx_of_deleted_particles = del_close_particles(particles, R_b, threshold_dist=3,
+                                                                  is_return_del_idx=True)
+        # print(sum(idx_of_deleted_particles.values()))
+        if sum(idx_of_deleted_particles.values()) == 0:
+            break
+
+    gravity_field = clac_grad_field(img.shape, particles, cur_config)
+    particles = adding_particles(particles, gravity_field, img.shape, cur_config)
+
 
     for iteration in range(cur_config['epoch_num']):
+        print("Iter={}, #particles={}".format(iteration, particles.shape[0]))
         if cur_config['dist_energy_type'] == 'exp':
             exp_resulting_vectors, exp_resulting_vectors_modules = calc_dist_energy(particles,
                                                                                     n_neighbours=cur_config['dist_n_neighbours'],
@@ -198,7 +220,7 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
                     if abs(delta_y) < abs(delta_x) * 2:
                         particle[0] += np.sign(delta_x)
 
-        particles = update_particles(particles, R_b, threshold_dist=cur_config['threshhold_dist_del'])
+        particles = del_close_particles(particles, R_b, threshold_dist=cur_config['threshhold_dist_del'])
 
         if iteration % 3 == 0:
             gravity_field = clac_grad_field(img.shape, particles, cur_config)
@@ -210,7 +232,8 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
             # plt.scatter(particles[:, 0], particles[:, 1], color='#00FFFF', linewidths=0.8)
             # plt.show()
 
-            adding_particles(particles, gravity_field, img.shape, cur_config)
+            particles = adding_particles(particles, gravity_field, img.shape, cur_config)
+
 
         if USE_WANDB:
             blob_energy = calc_blob_energy(R_b, particles)
@@ -307,7 +330,8 @@ if __name__ == '__main__':
                   'dist_energy_type': 'pit',
                   'threshhold_dist_del': 2.1,
                   'particle_call_window': 5,
-                  'particle_call_threshold': 0.45
+                  'particle_call_threshold': 0.45,
+                  'init_blob_threshold': 5.
                   }
 
 
@@ -317,7 +341,7 @@ if __name__ == '__main__':
     img = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff', -1)
     img_colorful = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff')
 
-    VERBOSE = False
+    VERBOSE = True
     USE_WANDB = False
 
     if USE_WANDB:

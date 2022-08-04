@@ -137,11 +137,30 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
 
 
     for iteration in range(cur_config['epoch_num']):
-        exp_resulting_vectors, exp_resulting_vectors_modules = calc_dist_energy(particles,
-                                                                                n_neighbours=cur_config['dist_n_neighbours'],
-                                                                                alpha=cur_config['dist_alpha'],
-                                                                                sigma=cur_config['dist_sigma']
-                                                                                )
+        if cur_config['dist_energy_type'] == 'exp':
+            exp_resulting_vectors, exp_resulting_vectors_modules = calc_dist_energy(particles,
+                                                                                    n_neighbours=cur_config['dist_n_neighbours'],
+                                                                                    alpha=cur_config['dist_alpha'],
+                                                                                    sigma=cur_config['dist_sigma']
+                                                                                    )
+
+        elif cur_config['dist_energy_type'] == 'pit':
+            exp_resulting_vectors, exp_resulting_vectors_modules = calc_dist_energy_pit(particles,
+                                                                                    n_neighbours=cur_config['dist_n_neighbours'],
+                                                                                    mu=cur_config['mu_dist_func'],
+                                                                                    sigma=cur_config['sigma_dist_func'],
+                                                                                    lambda_=cur_config['lambda_dist_func']
+                                                                                    )
+            if VERBOSE:
+                plt.imshow(R_b, alpha=0.3)
+                for cur_particle, vector_force in zip(particles, exp_resulting_vectors):
+                    plt.arrow(x=cur_particle[0], y=cur_particle[1],
+                              dx=vector_force[0] * 3., dy=vector_force[1] * 3.,
+                              head_width=0.5)
+                plt.scatter(particles[:, 0], particles[:, 1], color='#00FFFF', linewidths=2.8)
+                plt.show()
+        else:
+            raise AttributeError('dist_energy_type={} is not implemented!'.format(cur_config['dist_energy_type']))
         for particle_idx, particle in enumerate(particles):
             if cur_config['step_mode'] == 'contin':
                 # change x position of particle
@@ -182,18 +201,12 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
         if USE_WANDB:
             blob_energy = calc_blob_energy(R_b, particles)
 
-            # cur_situation = visualize_wandb(img_colorful, particles, color='r')
-            # cur_and_GT_situation = visualize_wandb(cur_situation, GT_data, color='g')
-            # particles_diff_visual = wandb.Image(cur_and_GT_situation, caption="all_particles_location")
-
             logs = {'step': iteration,
                     'blob_energy': wandb.Histogram(blob_energy),
                     'blob_energy_sum': np.sum(blob_energy),
                     'blob_energy_mean': np.mean(blob_energy),
                     'dist_energy_sum': np.sum(exp_resulting_vectors_modules),
                     'dist_energy_mean': np.mean(exp_resulting_vectors_modules),
-                    # 'dist_energy': wandb.Histogram(exp_resulting_vectors_modules),
-                    # 'Particles location. Green-GT, Red-particles': particles_diff_visual
                     }
 
             if iteration % 1 == 0:
@@ -205,13 +218,11 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
             wandb.log(logs)
 
         else:
-            # print('blob_energy= ', np.mean(calc_blob_energy(R_b, particles)))
-            # print('dist_energy= ', np.sum(exp_resulting_vectors_modules))
             if iteration % cur_config['metric_measure_freq'] == 0:
 
                 lsa, lsa_sum, lsa_mean, lsa_var = calc_metrics(particles, GT_data, mode=cur_config['metric_algo'])
-                if VERBOSE:
-                    print('lsa_sum, lsa_mean, lsa_var: ', lsa_sum, lsa_mean, lsa_var)
+                # if VERBOSE:
+                print('lsa_sum, lsa_mean, lsa_var: ', lsa_sum, lsa_mean, lsa_var)
                 if result['best_lsa_mean'] > lsa_mean * 1.01:
                     result['best_lsa_mean'] = lsa_mean
 
@@ -230,27 +241,10 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
                         plt.clf()
                 elif VERBOSE:
                     plt.show()
+                else:
+                    plt.clf()
 
     if cur_config['write_gif']:
-
-        # images = []
-        # import matplotlib.image as mpimg
-        #
-        # img = ('image_name.png')
-        #
-        # for filename in os.listdir('./img_log/'):
-        #     im = Image.open('./img_log/'+filename)
-        #     images.append(im)
-        #
-        # images[0].save(
-        #     "output.gif",
-        #     format="GIF",
-        #     save_all=True,
-        #     loop=0,
-        #     append_images=images,
-        #     duration=40,
-        #     disposal=3
-        # )
 
         with imageio.get_writer('mygif.gif', mode='I', fps=1) as writer:
             for filename in sorted(os.listdir('./img_log/')):
@@ -282,16 +276,20 @@ if __name__ == '__main__':
     #               'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 50,
     #               'n_particles_coeff': 2.0, 'metric_measure_freq': 10, 'n_particles': 52}
     cur_config = {'random_seed': 2022, 'lambda_dist': 1., 'lambda_blob': 0.6,
-                  'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2,
+                  'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 1,
                   # 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
                   'region': {'x_min': 0, 'x_max': 518, 'y_min': 0, 'y_max': 515},
                   'boundary_size': {'x': 10, 'y': 10},
                   'gradient_type': 'np_grad',
-                  'epoch_num': 30, 'n_particles_coeff': 1.0, 'metric_measure_freq': 1,
-                  'step_mode': 'contin', #discrete or contin
+                  'epoch_num': 10, 'n_particles_coeff': 1.0, 'metric_measure_freq': 1,
+                  'step_mode': 'discrete', #discrete or contin
                   'blobness_formula': 'custom',# 'simple_div', 'custom', 'div_corrected'
                   'write_gif': False,
-                  'metric_algo': 'Chamfer'
+                  'metric_algo': 'Chamfer',
+                  'mu_dist_func': 5.84,
+                  'sigma_dist_func': 0.83,
+                  'lambda_dist_func': -0.1,
+                  'dist_energy_type': 'pit'
                   }
 
 
@@ -302,7 +300,7 @@ if __name__ == '__main__':
     img_colorful = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff')
 
     VERBOSE = False
-    USE_WANDB = True
+    USE_WANDB = False
 
     if USE_WANDB:
         wandb.init(project='cones_AOSLO', config=cur_config)

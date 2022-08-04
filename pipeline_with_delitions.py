@@ -287,14 +287,6 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
             for filename in sorted(os.listdir('./img_log/')):
                 image = imageio.v2.imread('img_log/'+filename)
                 writer.append_data(image[:,:,:3])
-                # print(image.shape)
-
-
-
-
-        # if iteration % cur_config['metric_measure_freq'] == 0 and VERBOSE:
-        #     visualize(img, particles, GT_data, is_save=True,
-        #               img_name='step_' + str(iteration), save_dir='./examples/')
 
     if VERBOSE:
         visualize(img, particles, GT_data, is_save=True,

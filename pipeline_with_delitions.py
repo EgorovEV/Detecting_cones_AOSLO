@@ -15,7 +15,6 @@ from image_transformation import crop_image, mirror_padding_image
 def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
     # if cur_config[''] > 10:
 
-
     result = {
         'best_lsa_mean': +np.inf,
         'cur_config': cur_config
@@ -32,22 +31,10 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
     ### CREATE MIRROR-BOUNDARY, TO FORCE PARTILES STAY ON ORIGINAL IMAGE ###
     img, GT_data = mirror_padding_image(img, cur_config['boundary_size'], GT_data)
 
-    ### CREATE PARTICLE LOCATIONS ON IMG ###
-    cur_config['n_particles'] = int(GT_data.shape[0] * cur_config['n_particles_coeff'])
-    assert cur_config['n_particles'] >= GT_data.shape[0]
-    particles = np.random.uniform(low=[cur_config['boundary_size']['x'], cur_config['boundary_size']['y']],
-                                  high=[img.shape[1] - cur_config['boundary_size']['x'], img.shape[0] - cur_config['boundary_size']['y']],
-                                  size=(cur_config['n_particles'], 2))
-
-
-    if cur_config['step_mode'] == 'discrete':
-        particles = np.round(particles) #+ 0.5
-
     ### GET PARTICLE BLOBNESS ENERGY ###
     hessian_m = skimage.feature.hessian_matrix(img, sigma=1, mode='constant', cval=0, order='rc')
     # eigs[i, j, k] contains the ith-largest eigenvalue at position (j, k).
     eigs = skimage.feature.hessian_matrix_eigvals(hessian_m)
-
 
     assert (eigs[0, :, :] > eigs[1, :, :]).all()
     # eigs = np_sigmoid(eigs)
@@ -82,7 +69,7 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
     # plt.title('Lambda 1')
     # plt.show()
 
-#
+    #
     # if VERBOSE:
     #     x, y = np.meshgrid(np.arange(eigs[1, :, :].shape[1]), np.arange(eigs[1, :, :].shape[0]))
     #     plt.quiver(x, y, eigs[1, :, :], eigs[1, :, :])
@@ -104,7 +91,7 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
         R_b = R_b / threshold
 
     elif cur_config['blobness_formula'] == 'custom':
-        R_b = eigs[1, :, :] - eigs[0, :, :] + (np_sigmoid(-eigs[0, :, :])*10.)# + -eigs[0, :, :] * 100)
+        R_b = eigs[1, :, :] - eigs[0, :, :] + (np_sigmoid(-eigs[0, :, :]) * 10.)  # + -eigs[0, :, :] * 100)
 
     elif cur_config['blobness_formula'] == 'div_corrected':
         idx_pos_l0 = [eigs[0, :, :] > 0.]
@@ -114,8 +101,8 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
         min_abs_eigs = np.minimum(np.abs(eigs[0, :, :]), np.abs(eigs[1, :, :]))
         R_b = np.divide(min_abs_eigs, max_abs_eigs)
         R_b[idx_pos] = 0.
-        assert (R_b<1.0001).all()
-        assert (R_b>-0.0001).all()
+        assert (R_b < 1.0001).all()
+        assert (R_b > -0.0001).all()
     else:
         raise NotImplementedError
 
@@ -124,55 +111,63 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
 
     if VERBOSE:
         plt.imshow(R_b)
-        plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=0.3)
+        plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=0.3)
         plt.show()
 
     # calc grad of "Blobness field"
     blobness_grad = calc_grad_field(R_b, cur_config['gradient_type'])
     if VERBOSE:
         x, y = np.meshgrid(np.arange(blobness_grad.shape[1]), np.arange(blobness_grad.shape[0]))
-        plt.quiver(x, y, -blobness_grad[:,:,1], -blobness_grad[:,:,0])
+        plt.quiver(x, y, -blobness_grad[:, :, 1], -blobness_grad[:, :, 0])
         plt.imshow(R_b, alpha=0.3)
-        plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=2.8)
+        plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=2.8)
         plt.show()
 
-    if VERBOSE:
-        visualize(img, particles, GT_data, is_save=True,
-                  img_name='start', save_dir='./examples/')
-
-    # starting initialization
+    ### CREATE PARTICLE LOCATIONS ON IMG ###
     particles = initialize_high_prop_location(R_b,
                                               init_blob_threshold=cur_config['init_blob_threshold'],
                                               img_shape=img.shape,
                                               cur_config=cur_config)
 
+    is_stable_particle_index = [0 for _ in range(particles.shape[0])]
+
     while True:
-        particles, idx_of_deleted_particles = del_close_particles(particles, R_b, threshold_dist=3,
-                                                                  is_return_del_idx=True)
+        particles, idx_of_deleted_particles, is_stable_particle_index = \
+            del_close_particles(particles, is_stable_particle_index, R_b, threshold_dist=3)
         # print(sum(idx_of_deleted_particles.values()))
         if sum(idx_of_deleted_particles.values()) == 0:
             break
 
-    gravity_field = clac_grad_field(img.shape, particles, cur_config)
-    particles = adding_particles(particles, gravity_field, img.shape, cur_config)
+    is_stable_particle_index = [1 for _ in range(particles.shape[0])]
 
+    gravity_field = clac_grad_field(img.shape, particles, cur_config)
+    particles, is_stable_particle_index = adding_particles(particles,
+                                                           is_stable_particle_index,
+                                                           gravity_field, img.shape, cur_config)
+    if VERBOSE:
+        visualize(img, particles, GT_data, is_save=True,
+                  img_name='start', save_dir='./examples/')
 
     for iteration in range(cur_config['epoch_num']):
         print("Iter={}, #particles={}".format(iteration, particles.shape[0]))
         if cur_config['dist_energy_type'] == 'exp':
             exp_resulting_vectors, exp_resulting_vectors_modules = calc_dist_energy(particles,
-                                                                                    n_neighbours=cur_config['dist_n_neighbours'],
+                                                                                    n_neighbours=cur_config[
+                                                                                        'dist_n_neighbours'],
                                                                                     alpha=cur_config['dist_alpha'],
                                                                                     sigma=cur_config['dist_sigma']
                                                                                     )
 
         elif cur_config['dist_energy_type'] == 'pit':
             exp_resulting_vectors, exp_resulting_vectors_modules = calc_dist_energy_pit(particles,
-                                                                                    n_neighbours=cur_config['dist_n_neighbours'],
-                                                                                    mu=cur_config['mu_dist_func'],
-                                                                                    sigma=cur_config['sigma_dist_func'],
-                                                                                    lambda_=cur_config['lambda_dist_func']
-                                                                                    )
+                                                                                        n_neighbours=cur_config[
+                                                                                            'dist_n_neighbours'],
+                                                                                        mu=cur_config['mu_dist_func'],
+                                                                                        sigma=cur_config[
+                                                                                            'sigma_dist_func'],
+                                                                                        lambda_=cur_config[
+                                                                                            'lambda_dist_func']
+                                                                                        )
             if VERBOSE:
                 plt.imshow(R_b, alpha=0.3)
                 for cur_particle, vector_force in zip(particles, exp_resulting_vectors):
@@ -184,10 +179,13 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
         else:
             raise AttributeError('dist_energy_type={} is not implemented!'.format(cur_config['dist_energy_type']))
         for particle_idx, particle in enumerate(particles):
+            if is_stable_particle_index[particle_idx]:
+                continue
+
             if cur_config['step_mode'] == 'contin':
                 # change x position of particle
                 dy = -1 * cur_config['lambda_blob'] * blobness_grad[int(particle[1])][int(particle[0])][0] + \
-                               cur_config['lambda_dist'] * exp_resulting_vectors[particle_idx][0]
+                     cur_config['lambda_dist'] * exp_resulting_vectors[particle_idx][0]
                 dx = -1 * cur_config['lambda_blob'] * blobness_grad[int(particle[1])][int(particle[0])][1] + \
                      cur_config['lambda_dist'] * exp_resulting_vectors[particle_idx][1]
 
@@ -199,11 +197,11 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
                 particle[0] += dx
                 particle[1] += dy
 
-            elif cur_config['step_mode'] == 'discrete':# and particle_idx == 0:
-                delta_y = -1. * cur_config['lambda_blob'] * blobness_grad[int(particle[1])][int(particle[0])][0] #+ \
-                               # cur_config['lambda_dist'] * exp_resulting_vectors[particle_idx][0]
-                delta_x = -1. * cur_config['lambda_blob'] * blobness_grad[int(particle[1])][int(particle[0])][1] #+ \
-                               # cur_config['lambda_dist'] * exp_resulting_vectors[particle_idx][1]
+            elif cur_config['step_mode'] == 'discrete':  # and particle_idx == 0:
+                delta_y = -1. * cur_config['lambda_blob'] * blobness_grad[int(particle[1])][int(particle[0])][0]  # + \
+                # cur_config['lambda_dist'] * exp_resulting_vectors[particle_idx][0]
+                delta_x = -1. * cur_config['lambda_blob'] * blobness_grad[int(particle[1])][int(particle[0])][1]  # + \
+                # cur_config['lambda_dist'] * exp_resulting_vectors[particle_idx][1]
 
                 # delta_x, delta_y = delta_y, delta_x
                 # a, b = delta_x, delta_y
@@ -220,9 +218,14 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
                     if abs(delta_y) < abs(delta_x) * 2:
                         particle[0] += np.sign(delta_x)
 
-        particles = del_close_particles(particles, R_b, threshold_dist=cur_config['threshhold_dist_del'])
+        particles, _, is_stable_particle_index = \
+            del_close_particles(particles, is_stable_particle_index, R_b,
+                                threshold_dist=cur_config['threshhold_dist_del'])
+        assert particles.shape[0] == len(is_stable_particle_index)
 
-        if iteration % 3 == 0:
+        if iteration % 4 == 3:
+            is_stable_particle_index = [1 for _ in range(len(is_stable_particle_index))]
+
             gravity_field = clac_grad_field(img.shape, particles, cur_config)
 
             # x, y = np.meshgrid(np.arange(gravity_field.shape[1]), np.arange(gravity_field.shape[0]))
@@ -232,8 +235,10 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
             # plt.scatter(particles[:, 0], particles[:, 1], color='#00FFFF', linewidths=0.8)
             # plt.show()
 
-            particles = adding_particles(particles, gravity_field, img.shape, cur_config)
-
+            particles, is_stable_particle_index = adding_particles(particles,
+                                                                   is_stable_particle_index,
+                                                                   gravity_field, img.shape,
+                                                                   cur_config)
 
         if USE_WANDB:
             blob_energy = calc_blob_energy(R_b, particles)
@@ -262,20 +267,22 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
                 print('lsa_sum, lsa_mean, lsa_var: ', lsa_sum, lsa_mean, lsa_var)
                 if result['best_lsa_mean'] > lsa_mean * 1.01:
                     result['best_lsa_mean'] = lsa_mean
-
-
+                print("Stable particles = ", is_stable_particle_index)
                 x, y = np.meshgrid(np.arange(blobness_grad.shape[1]), np.arange(blobness_grad.shape[0]))
                 plt.quiver(x, y, -blobness_grad[:, :, 1], -blobness_grad[:, :, 0], )
                 plt.imshow(R_b, alpha=0.3)
                 plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=0.8)
                 plt.scatter(particles[:, 0], particles[:, 1], color='#00FFFF', linewidths=0.8)
+                is_stable_particle_index_bool = np.array(is_stable_particle_index).astype(bool)
+                plt.scatter(particles[is_stable_particle_index_bool, 0],
+                            particles[is_stable_particle_index_bool, 1], color='#FFFFFF', linewidths=0.8)
                 if cur_config['write_gif']:
-                        plt.savefig('img_log/{}_sum{}_mean{}_var{}.png'.format(iteration,
-                                                                               lsa_sum,
-                                                                               lsa_mean,
-                                                                               lsa_var),
-                                    dpi=100)
-                        plt.clf()
+                    plt.savefig('img_log/{}_sum{}_mean{}_var{}.png'.format(iteration,
+                                                                           lsa_sum,
+                                                                           lsa_mean,
+                                                                           lsa_var),
+                                dpi=100)
+                    plt.clf()
                 elif VERBOSE:
                     plt.show()
                 else:
@@ -285,8 +292,8 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
 
         with imageio.get_writer('mygif.gif', mode='I', fps=1) as writer:
             for filename in sorted(os.listdir('./img_log/')):
-                image = imageio.v2.imread('img_log/'+filename)
-                writer.append_data(image[:,:,:3])
+                image = imageio.v2.imread('img_log/' + filename)
+                writer.append_data(image[:, :, :3])
 
     if VERBOSE:
         visualize(img, particles, GT_data, is_save=True,
@@ -296,7 +303,10 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
 
 
 if __name__ == '__main__':
-    cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.01, 'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345}, 'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 500, 'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
+    cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.01, 'dist_alpha': 0.3, 'dist_sigma': 0.3,
+                  'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
+                  'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 500,
+                  'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
     # cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.1, 'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345}, 'boundary_size': {'x': 5, 'y': 5}, 'gradient_type': 'np_grad', 'epoch_num': 500, 'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
     # cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.05, 'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345}, 'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 500, 'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
 
@@ -312,8 +322,8 @@ if __name__ == '__main__':
                   'boundary_size': {'x': 10, 'y': 10},
                   'gradient_type': 'np_grad',
                   'epoch_num': 10, 'n_particles_coeff': 1.0, 'metric_measure_freq': 1,
-                  'step_mode': 'discrete', #discrete or contin
-                  'blobness_formula': 'custom',# 'simple_div', 'custom', 'div_corrected'
+                  'step_mode': 'discrete',  # discrete or contin
+                  'blobness_formula': 'custom',  # 'simple_div', 'custom', 'div_corrected'
                   'write_gif': False,
                   'metric_algo': 'Chamfer',
                   'mu_dist_func': 5.84,
@@ -325,8 +335,6 @@ if __name__ == '__main__':
                   'particle_call_threshold': 0.45,
                   'init_blob_threshold': 5.
                   }
-
-
 
     GT_data = pd.read_csv('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.csv')
     GT_data = GT_data.to_numpy()
@@ -340,4 +348,3 @@ if __name__ == '__main__':
         wandb.init(project='cones_AOSLO', config=cur_config)
 
     find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB)
-

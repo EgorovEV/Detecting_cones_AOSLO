@@ -187,13 +187,16 @@ def calc_metrics(particles, GT_particles, mode='hangarian'):
         raise ValueError
 
 
-def del_close_particles(particles, R_b, threshold_dist=2., is_return_del_idx=False):
+def del_close_particles(particles, is_stable_particle_index, R_b, threshold_dist=2.):
     min_dists, indexes = calc_dist_to_neares(particles, particles, n_neighbours=2, return_indexes=True)
     dist_to_nearest_particle = min_dists[:, 1]
     to_delete = {idx: False for idx in range(particles.shape[0])}
     for dist, relation in zip(dist_to_nearest_particle, indexes):
         particle_idx_from = relation[0]
         particle_idx_to = relation[1]
+        # if particle_from is "stable", don't delete it
+        if is_stable_particle_index[particle_idx_from]:
+            continue
         # if dist between particle is too small
         if dist < threshold_dist:
             # and none of that particles are already marked "deleted"
@@ -206,16 +209,17 @@ def del_close_particles(particles, R_b, threshold_dist=2., is_return_del_idx=Fal
 
     new_particles_amount = particles.shape[0] - sum(to_delete.values())
     new_particles = np.zeros((new_particles_amount, 2))
+    new_is_stable_particle_index = [None for _ in range(new_particles_amount)]
     particle_idx = 0
     for idx, is_delete in to_delete.items():
         if not is_delete:
+            new_is_stable_particle_index[particle_idx] = is_stable_particle_index[idx]
             new_particles[particle_idx] = particles[idx][:]
             particle_idx += 1
     print("Delete #particles=", particles.shape[0] - new_particles.shape[0])
-    if is_return_del_idx:
-        return new_particles, to_delete
-    else:
-        return new_particles
+
+    return new_particles, to_delete, new_is_stable_particle_index
+
 
 
 def is_particle_here(particles, x, y):
@@ -247,7 +251,7 @@ def clac_grad_field(img_shape, particles, cur_config):
     return gravity_field
 
 
-def adding_particles(particles, gravity_field, img_shape, cur_config):
+def adding_particles(particles, is_stable_particle_index, gravity_field, img_shape, cur_config):
     origin_img_borders = {'y': [cur_config['boundary_size']['y'], img_shape[0] - cur_config['boundary_size']['y']],
                           'x': [cur_config['boundary_size']['x'], img_shape[1] - cur_config['boundary_size']['x']]}
     step = cur_config['particle_call_window']
@@ -263,8 +267,9 @@ def adding_particles(particles, gravity_field, img_shape, cur_config):
                 particles = np.vstack(
                     (particles, np.array([pix_x + argmin_grav_in_window[1], pix_y + argmin_grav_in_window[0]])))
                 particles_added += 1
-    print('Particle Added:', particles_added)
-    return particles
+    print('#Particle Added:', particles_added)
+    is_stable_particle_index += [0 for _ in range(particles.shape[0]-particles_added, particles.shape[0])]
+    return particles, is_stable_particle_index
 
 
 def initialize_high_prop_location(blobness_grad, init_blob_threshold, img_shape, cur_config):

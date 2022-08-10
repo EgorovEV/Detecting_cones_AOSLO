@@ -4,31 +4,32 @@ We want to use the idea of the particle systems to detect cones in AOSLO confoca
 # How to start
 Install dependencies:
 ```
-code will be here
+pip install -r requirements.txt
 ```
 To detect blobs (AOSLO):
 ```
-python main.py
+python pipeline_with_delitions.py
 ```
-To visualize real AOSLO position:
+To visualize all real AOSLO position:
 ```
 python visualize_centers.py
 ```
 # Description
 ### Current algo
 1. create N particles.
-2. calculate "blobness" measure using technique offered in [2].
+2. calculate "blobness" measure using technique offered in [2] /  custom.
 3. calculate the gradient field of "blobness".
-4. move particles in negatieve gradient direction.
-5. visualize current particle position.
-6. repeat step 4 M-times, every 100 updates perform step 5. 
-### Also implemented
-* finding and calculating distance to N nearest particles.
-* writing visualization of algo results into ./examples dir.
+4. generate particle in places with ultra hight "blobness"
+5. fix position of the particles
+6. generate particles based on distance energy.
+7. move particles in negatieve gradient direction (blobness+distance force).
+8. calculate metrics
+9. repeat step 5-8 M-times, but step 5 only every N-run;
+ 
 
 ### ToDo
-* Include distance to the algo
-* Discuss posible metric to measure algo perfomance
+* Discuss particle-fixing mechnizm
+* Optimize
 
 
 # Papers:

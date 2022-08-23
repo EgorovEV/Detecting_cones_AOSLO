@@ -62,17 +62,46 @@ def calc_dist_energy(particles, n_neighbours, alpha, sigma):
     return exp_resulting_vectors, exp_resulting_vectors_modules
 
 
-def calc_dist_energy_pit(particles, n_neighbours, mu, sigma, lambda_):
-    def energy_pit_func2(x, y, mu, sigma, lambda_):
-        dist = np.sqrt((x ** 2.) + (y ** 2.))
-        if dist <= mu:
-            return scipy.stats.expon(lambda_).pdf(dist) - scipy.stats.norm(mu, sigma).pdf(dist) + 0.48
-        else:
-            return scipy.stats.expon(lambda_).pdf(dist) + scipy.stats.norm(mu, sigma).pdf(dist) - 0.48
-
-    def energy_pit_func(x, y, mu, sigma, lambda_):
-        dist = np.sqrt((x ** 2.) + (y ** 2.))
+def energy_pit_func3(x, y, mu, sigma, lambda_):
+    dist = np.sqrt((x ** 2.) + (y ** 2.))
+    if dist <= mu:
         return scipy.stats.expon(lambda_).pdf(dist) - scipy.stats.norm(mu, sigma).pdf(dist) + 0.48
+    elif dist >= mu+2*sigma:
+        return 0
+    else:
+        return scipy.stats.expon(lambda_).pdf(dist) + max(scipy.stats.norm(mu, sigma).pdf(dist) - 0.48, -0.1)
+
+def energy_pit_func2(x, y, mu, sigma, lambda_):
+    dist = np.sqrt((x ** 2.) + (y ** 2.))
+    if dist <= mu:
+        return scipy.stats.expon(lambda_).pdf(dist) - scipy.stats.norm(mu, sigma).pdf(dist) + 0.48
+    else:
+        return scipy.stats.expon(lambda_).pdf(dist) + scipy.stats.norm(mu, sigma).pdf(dist) - 0.48
+
+def energy_pit_func1(x, y, mu, sigma, lambda_):
+    dist = np.sqrt((x ** 2.) + (y ** 2.))
+    return scipy.stats.expon(lambda_).pdf(dist) - scipy.stats.norm(mu, sigma).pdf(dist) + 0.48
+
+
+def get_precomputed_dist_func(cur_config):
+    reception_field_size = cur_config['reception_field_size']
+    precomputed_dist_forces_field = np.zeros((reception_field_size,reception_field_size))
+    for x in range(reception_field_size):
+        for y in range(reception_field_size):
+            dx_from_center = x- (reception_field_size //2) # -10,...,0,...,+10.
+            dy_from_center = y- (reception_field_size //2)
+            precomputed_dist_forces_field[y][x] += energy_pit_func3(dx_from_center, dy_from_center,
+                                                                   mu=cur_config['mu_dist_func'],
+                                                                   sigma=cur_config[
+                                                                       'sigma_dist_func'],
+                                                                   lambda_=cur_config[
+                                                                       'lambda_dist_func']
+                                                                   )
+    return precomputed_dist_forces_field
+
+
+
+def calc_dist_energy_pit(particles, n_neighbours, mu, sigma, lambda_):
 
         # axis_diff = lambda dist: scipy.stats.expon(lambda_).pdf(dist) -\
         #         scipy.stats.norm(mu, sigma).pdf(dist)
@@ -86,7 +115,7 @@ def calc_dist_energy_pit(particles, n_neighbours, mu, sigma, lambda_):
         directions = []
         for vector in neigh_vectors:
             normed_vector = vector / np.linalg.norm(vector)
-            directions.append(normed_vector * energy_pit_func2(vector[0], vector[1], mu, sigma, lambda_))
+            directions.append(normed_vector * energy_pit_func3(vector[0], vector[1], mu, sigma, lambda_))
             # print(directions[-1])
         directions = np.asarray(directions)
         exp_resulting_vectors[vector_idx] = np.sum(directions, axis=0)
@@ -187,7 +216,7 @@ def calc_metrics(particles, GT_particles, mode='hangarian'):
         raise ValueError
 
 
-def del_close_particles(particles, is_stable_particle_index, R_b, threshold_dist=2.):
+def del_close_particles(particles, is_stable_particle_index, R_b, cur_config, threshold_dist=2.):
     min_dists, indexes = calc_dist_to_neares(particles, particles, n_neighbours=2, return_indexes=True)
     dist_to_nearest_particle = min_dists[:, 1]
     to_delete = {idx: False for idx in range(particles.shape[0])}
@@ -216,7 +245,9 @@ def del_close_particles(particles, is_stable_particle_index, R_b, threshold_dist
             new_is_stable_particle_index[particle_idx] = is_stable_particle_index[idx]
             new_particles[particle_idx] = particles[idx][:]
             particle_idx += 1
-    print("Delete #particles=", particles.shape[0] - new_particles.shape[0])
+
+    if cur_config['verbose_func']:
+        print("Delete #particles=", particles.shape[0] - new_particles.shape[0])
 
     return new_particles, to_delete, new_is_stable_particle_index
 
@@ -229,7 +260,7 @@ def is_particle_here(particles, x, y):
     return False
 
 
-def clac_grad_field(img_shape, particles, cur_config):
+def calc_gravity_field(img_shape, particles, cur_config):
     gravity_field = np.zeros(img_shape)
     for x in range(img_shape[1]):
         for y in range(img_shape[0]):
@@ -250,6 +281,23 @@ def clac_grad_field(img_shape, particles, cur_config):
             gravity_field[y][x] = exp_resulting_vectors_modules[-1]
     return gravity_field
 
+def calc_gravity_field_optim(precomputed_dist_forces_field, img_shape, particles, cur_config):
+
+    gravity_field = np.zeros(img_shape)
+    reception_field_size = cur_config['reception_field_size']
+    half_rfs = reception_field_size // 2
+    for particle in particles:
+        center_x, center_y = int(particle[0]), int(particle[1])
+        low_x, low_y = max(0, center_x-half_rfs), max(0, center_y-half_rfs)
+        high_x, high_y = min(img_shape[1], center_x + half_rfs + 1), min(img_shape[0], center_y + half_rfs + 1)
+        gravity_field[low_y:high_y, low_x:high_x] += precomputed_dist_forces_field
+
+    # if is_particle_here(particles, x, y):
+    #     gravity_field[y][x] = 1.
+    #     continue
+
+    return gravity_field
+
 
 def adding_particles(particles, is_stable_particle_index, gravity_field, img_shape, cur_config):
     origin_img_borders = {'y': [cur_config['boundary_size']['y'], img_shape[0] - cur_config['boundary_size']['y']],
@@ -267,7 +315,9 @@ def adding_particles(particles, is_stable_particle_index, gravity_field, img_sha
                 particles = np.vstack(
                     (particles, np.array([pix_x + argmin_grav_in_window[1], pix_y + argmin_grav_in_window[0]])))
                 particles_added += 1
-    print('#Particle Added:', particles_added)
+
+    if cur_config['verbose_func']:
+        print('#Particle Added:', particles_added)
     is_stable_particle_index += [0 for _ in range(particles.shape[0]-particles_added, particles.shape[0])]
     return particles, is_stable_particle_index
 
@@ -285,6 +335,7 @@ def initialize_high_prop_location(blobness_grad, init_blob_threshold, img_shape,
     all_x += cur_config['boundary_size']['x']
 
     particles = np.vstack((all_x, all_y)).T
-    print('Starting particles:', particles.shape)
+    if cur_config['verbose_func']:
+        print('Starting particles:', particles.shape)
 
     return particles

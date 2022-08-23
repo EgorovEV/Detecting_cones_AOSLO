@@ -36,6 +36,9 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
     # eigs[i, j, k] contains the ith-largest eigenvalue at position (j, k).
     eigs = skimage.feature.hessian_matrix_eigvals(hessian_m)
 
+    ### PRECALCULATE POSSIBLE ONE-TO-ONE GRAVITY FORCES ###
+    precomputed_dist_func_val = get_precomputed_dist_func(cur_config)
+
     assert (eigs[0, :, :] > eigs[1, :, :]).all()
     # eigs = np_sigmoid(eigs)
 
@@ -133,14 +136,23 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
 
     while True:
         particles, idx_of_deleted_particles, is_stable_particle_index = \
-            del_close_particles(particles, is_stable_particle_index, R_b, threshold_dist=3)
+            del_close_particles(particles, is_stable_particle_index, R_b, cur_config, threshold_dist=3)
         # print(sum(idx_of_deleted_particles.values()))
         if sum(idx_of_deleted_particles.values()) == 0:
             break
 
     is_stable_particle_index = [1 for _ in range(particles.shape[0])]
 
-    gravity_field = clac_grad_field(img.shape, particles, cur_config)
+    # gravity_field = calc_gravity_field(img.shape, particles, cur_config)
+    gravity_field = calc_gravity_field_optim(precomputed_dist_func_val, img.shape, particles, cur_config)
+
+    if VERBOSE:
+        x, y = np.meshgrid(np.arange(gravity_field.shape[1]), np.arange(gravity_field.shape[0]))
+        plt.imshow(gravity_field, alpha=0.3)
+        # plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=0.8)
+        plt.scatter(particles[:, 0], particles[:, 1], color='#000000', linewidths=0.8)
+        plt.show()
+
     particles, is_stable_particle_index = adding_particles(particles,
                                                            is_stable_particle_index,
                                                            gravity_field, img.shape, cur_config)
@@ -219,14 +231,15 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
                         particle[0] += np.sign(delta_x)
 
         particles, _, is_stable_particle_index = \
-            del_close_particles(particles, is_stable_particle_index, R_b,
+            del_close_particles(particles, is_stable_particle_index, R_b, cur_config,
                                 threshold_dist=cur_config['threshhold_dist_del'])
         assert particles.shape[0] == len(is_stable_particle_index)
 
         if iteration % 4 == 3:
             is_stable_particle_index = [1 for _ in range(len(is_stable_particle_index))]
 
-            gravity_field = clac_grad_field(img.shape, particles, cur_config)
+            # gravity_field = calc_gravity_field(img.shape, particles, cur_config)
+            gravity_field = calc_gravity_field_optim(precomputed_dist_func_val, img.shape, particles, cur_config)
 
             # x, y = np.meshgrid(np.arange(gravity_field.shape[1]), np.arange(gravity_field.shape[0]))
             # # plt.quiver(x, y, -blobness_grad[:, :, 1], -blobness_grad[:, :, 0], )
@@ -303,6 +316,11 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB):
 
 
 if __name__ == '__main__':
+
+    VERBOSE = True
+    USE_WANDB = False
+
+
     cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.01, 'dist_alpha': 0.3, 'dist_sigma': 0.3,
                   'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
                   'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 500,
@@ -333,7 +351,9 @@ if __name__ == '__main__':
                   'threshhold_dist_del': 2.1,
                   'particle_call_window': 5,
                   'particle_call_threshold': 0.45,
-                  'init_blob_threshold': 5.
+                  'init_blob_threshold': 5.,
+                  'reception_field_size': 15,
+                  'verbose_func': VERBOSE
                   }
 
     GT_data = pd.read_csv('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.csv')
@@ -341,8 +361,7 @@ if __name__ == '__main__':
     img = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff', -1)
     img_colorful = cv2.imread('dataset/BAK1008L1_2020_07_02_11_56_18_AOSLO_788_V006_annotated_JLR_128_97_646_612.tiff')
 
-    VERBOSE = True
-    USE_WANDB = False
+
 
     if USE_WANDB:
         wandb.init(project='cones_AOSLO', config=cur_config)

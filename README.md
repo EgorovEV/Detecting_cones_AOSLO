@@ -16,13 +16,13 @@ python visualize_centers.py
 ```
 # Description
 ### Current algo
-1. create N particles.
-2. calculate "blobness" measure using technique offered in [2] /  custom.
+1. calculate "blobness" measure using technique offered in [2] /  custom.
+2. generate particle in places with ultra hight "blobness"
 3. calculate the gradient field of "blobness".
-4. generate particle in places with ultra hight "blobness"
-5. fix position of the particles
-6. generate particles based on distance energy.
-7. move particles in negatieve gradient direction (blobness+distance force).
+4. fix position of the particles
+5. generate particles based on distance energy.
+6. move particles in negatieve gradient direction (blobness+distance force).
+7. delete particles that comes too close to each other.
 8. calculate metrics
 9. repeat step 5-8 M-times, but step 5 only every N-run;
  

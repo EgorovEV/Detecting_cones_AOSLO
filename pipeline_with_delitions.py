@@ -27,8 +27,10 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
         'best_blobEn_mean': -np.inf,
         'dice_coeff_1': -np.inf,
         'dice_coeff_2': -np.inf,
-        'cur_config': cur_config
+        'cur_config': cur_config,
+        'time_spended': 0,
     }
+    t0 = time.time()
 
     np.random.seed(cur_config['random_seed'])
 
@@ -322,9 +324,10 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
                 result['lsa_var'] = lsa_var
                 result['#GT/#particles'] = len(GT_data) / len(particles)
                 result['experiment_idx'] = experiment_idx
-                visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='1',
-                              experiment_idx=experiment_idx,
-                              dice=result['dice_coeff_1'], iteration=iteration, save_dir='./examples/')
+                if cur_config['save_best_result_visualisation']:
+                    visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='1',
+                                  experiment_idx=experiment_idx,
+                                  dice=result['dice_coeff_1'], iteration=iteration, save_dir='./examples/')
 
             if result['dice_coeff_2'] < particles_metrics['2']['dice'] * 0.995:
                 result['dice_coeff_2'] = particles_metrics['2']['dice']
@@ -332,9 +335,10 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
                 result['lsa_var'] = lsa_var
                 result['#GT/#particles'] = len(GT_data) / len(particles)
                 result['experiment_idx'] = experiment_idx
-                visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='2',
-                              experiment_idx=experiment_idx,
-                              dice=result['dice_coeff_2'], iteration=iteration, save_dir='./examples/')
+                if cur_config['save_best_result_visualisation']:
+                    visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='2',
+                                  experiment_idx=experiment_idx,
+                                  dice=result['dice_coeff_2'], iteration=iteration, save_dir='./examples/')
 
         else:
             if iteration % cur_config['metric_measure_freq'] == 0:
@@ -354,15 +358,17 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
 
                 if result['dice_coeff_1'] < particles_metrics['1']['dice'] * 0.995:
                     result['dice_coeff_1'] = particles_metrics['1']['dice']
-                    visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='1',
-                                  experiment_idx=experiment_idx,
-                                  dice=result['dice_coeff_1'], iteration=iteration, save_dir='./examples/')
+                    if cur_config['save_best_result_visualisation']:
+                        visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='1',
+                                      experiment_idx=experiment_idx,
+                                      dice=result['dice_coeff_1'], iteration=iteration, save_dir='./examples/')
 
                 if result['dice_coeff_2'] < particles_metrics['2']['dice'] * 0.995:
                     result['dice_coeff_2'] = particles_metrics['2']['dice']
-                    visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='2',
-                                  experiment_idx=experiment_idx,
-                                  dice=result['dice_coeff_2'], iteration=iteration, save_dir='./examples/')
+                    if cur_config['save_best_result_visualisation']:
+                        visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='2',
+                                      experiment_idx=experiment_idx,
+                                      dice=result['dice_coeff_2'], iteration=iteration, save_dir='./examples/')
 
                 lsa, lsa_sum, lsa_mean, lsa_var = calc_metrics(particles, GT_data, gt_to_particles, particles_to_gt,
                                                                mode=cur_config['metric_algo'])
@@ -418,6 +424,7 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
     visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='2', experiment_idx=experiment_idx,
                   dice=result['dice_coeff_2'], iteration=30, save_dir='./examples/')
 
+    result['time_spended'] = time.time() - t0
     return result, time_spended
 
 
@@ -460,7 +467,8 @@ if __name__ == '__main__':
                   'init_blob_threshold': 5.,
                   'reception_field_size': 21,
                   'fix_particles_frequency': 4,
-                  'verbose_func': VERBOSE
+                  'verbose_func': VERBOSE,
+                  'save_best_result_visualisation': False
                   }
 
     if cur_config['blobness_formula'] == 'div_corrected':

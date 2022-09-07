@@ -101,10 +101,7 @@ def get_precomputed_dist_func(cur_config):
 
 def calc_dist_energy_pit(particles, n_neighbours, mu, sigma, lambda_,
                          use_optimisation=False, is_stable_particle_index=None):
-    t1 = time.time()
     top_dist_matr, top_dist_vectors = calc_distances(particles, particles, n_neighbours)
-    print('dist_matr_calc=', time.time() - t1)
-    t1 = time.time()
 
     exp_resulting_vectors = np.zeros((top_dist_vectors.shape[0], 2))
     for vector_idx, neigh_vectors in enumerate(top_dist_vectors):
@@ -118,7 +115,6 @@ def calc_dist_energy_pit(particles, n_neighbours, mu, sigma, lambda_,
             # print(directions[-1])
         directions = np.asarray(directions)
         exp_resulting_vectors[vector_idx] = np.sum(directions, axis=0)
-    print('energy_calc=', time.time() - t1)
     exp_resulting_vectors_modules = np.linalg.norm(exp_resulting_vectors, axis=1)
     return exp_resulting_vectors, exp_resulting_vectors_modules
 
@@ -132,6 +128,9 @@ def calc_blob_energy(R_b, particles):
     blob_energy = np.zeros(particles.shape[0])
     for idx, (x_pos, y_pos) in enumerate(particles):
         blob_energy[idx] = R_b[int(y_pos)][int(x_pos)]
+
+    # int_particles = particles.astype(np.int)
+    # blob_energy = R_b[int_particles[:,1]][int_particles[:,0]]
     return blob_energy
 
 
@@ -392,19 +391,10 @@ def calc_acc_metrics(particles, GT_particles, gt_to_particles, particles_to_gt, 
                          '2': {'TP': 0, 'FP': 0, 'FN': 0, 'dice': None, 'precision': None, 'recall': None, }}
 
     # iterate over closest distances from particles to GT (shape: #GT)
-    for dist in particles_to_gt:
-        for dist_name, dist_threshod in dist_threshods.items():
-            if dist < dist_threshod:
-                particles_metrics[dist_name]['TP'] += 1
-            else:
-                # we did not predict that cone locates here => FN
-                particles_metrics[dist_name]['FN'] += 1
-
-    for dist in gt_to_particles:
-        for dist_name, dist_threshod in dist_threshods.items():
-            if dist > dist_threshod:
-                # we predict that cone locates here, and it's false => FP
-                particles_metrics[dist_name]['FP'] += 1
+    for dist_name, dist_threshod in dist_threshods.items():
+        particles_metrics[dist_name]['TP'] = np.sum([particles_to_gt <= dist_threshod])
+        particles_metrics[dist_name]['FN'] = np.sum([particles_to_gt > dist_threshod])
+        particles_metrics[dist_name]['FP'] = np.sum([gt_to_particles > dist_threshod])
 
     for dist_name, dist_threshod in dist_threshods.items():
         TP = particles_metrics[dist_name]['TP']

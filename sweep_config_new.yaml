@@ -1,0 +1,107 @@
+command:
+  - ${env}
+  - '../huawei_ai_anc_project/pycharm_venv_py38/Scripts/python.exe'
+  - ${program}
+program: main_with_delitions.py
+method: bayes
+metric:
+  name: 2_dice
+  goal: maximize
+parameters:
+  region.x_max:
+    value: 518
+  region.x_min:
+    value: 0
+  region.y_max:
+    value: 515
+  region.y_min:
+    value:  0
+  epoch_num:
+    value:  30
+  step_mode:
+    distribution: categorical
+    values:
+      - discrete
+  write_gif:
+    value: 0
+  lambda_blob:
+    value: 1.
+  lambda_dist:
+    distribution: uniform
+    min: 0.05
+    max: 2.
+  metric_algo:
+    distribution: categorical
+    values:
+      - Chamfer
+  random_seed:
+    value: 2022
+  mu_dist_func:
+    distribution: uniform
+    min: 5.5
+    max: 6.2
+  verbose_func:
+    distribution: categorical
+    values:
+      - 0
+  boundary_size.x:
+    value: 15
+  boundary_size.y:
+    value: 15
+  gradient_type:
+    distribution: categorical
+    values:
+      - np_grad
+  sigma_dist_func:
+    distribution: uniform
+    min: 0.415
+    max: 1.66
+  blobness_formula:
+    distribution: categorical
+    values:
+      - custom
+  dist_energy_type:
+    distribution: categorical
+    values:
+      - pit
+  lambda_dist_func:
+    distribution: uniform
+    min: -0.2
+    max: -0.05
+  dist_n_neighbours:
+    distribution: int_uniform
+    min: 1
+    max: 6
+  init_blob_threshold:
+    distribution: uniform
+    min: 4.95
+    max: 5.01
+  metric_measure_freq:
+    value: 3
+  threshhold_dist_del:
+    distribution: uniform
+    min: 2.7
+    max: 4.5
+  particle_call_window:
+    values:
+    - 5.
+    - 5.5
+    - 6.
+    - 6.4
+    - 6.8
+    - 7.
+    - 7.3
+    - 7.7
+    - 8.
+    - 8.5
+    - 9
+  reception_field_size:
+    value: 19
+  fix_particles_frequency:
+    distribution: int_uniform
+    min: 4
+    max: 8
+  particle_call_threshold:
+    distribution: uniform
+    min: 0.05
+    max: 0.15

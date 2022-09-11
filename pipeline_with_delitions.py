@@ -52,37 +52,15 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
     precomputed_dist_func_val = get_precomputed_dist_func(cur_config)
 
     assert (eigs[0, :, :] > eigs[1, :, :]).all()
-    # eigs = np_sigmoid(eigs)
 
-    # for row_idx, row in enumerate(eigs):
-    #     for el_idx, el in enumerate(row):
-    #         l1, l2 = el[0], el[1]
-    #         if (l1 < 1 or l2 < 1) and :
-    #             eigs[row_idx][el_idx][0]
-
-    # assert (np.abs(eigs[0, :, :]) > np.abs((eigs[1, :, :]))).all()
-
-    # first_eigs = np.maximum(eigs_mixes[0, :, :], eigs_mixes[1, :, :])
-    # second_eigs = np.minimum(eigs_mixes[0, :, :], eigs_mixes[1, :, :])
-
-    # pointwise division, multiplications
-    # page 5(down) from "Multiscale Vessel Enhancement Filtering"
-    # R_b - measure of "blobness"
-
-    ######## EIGENVALUES VISUALISATION ###########
-    # x, y = np.meshgrid(np.arange(eigs[0, :, :].shape[1]), np.arange(eigs[0, :, :].shape[0]))
-    # # plt.quiver(x, y, eigs[0, :, :], eigs[0, :, :])
-    # plt.imshow(eigs[0, :, :], alpha=0.3)
-    # plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=2.8)
-    # plt.title('Lambda 1')
-
-    ######## EIGENVALUES VISUALISATION ###########
-    # fig, axis = plt.subplots()  # il me semble que c'est une bonne habitude de faire supbplots
-    # heatmap = axis.pcolor(eigs[0, :, :], cmap=plt.cm.YlGn)
-    # plt.scatter(GT_data[:, 0]+0.5, GT_data[:, 1]+0.5, color='r', linewidths=2.8)
-    # plt.colorbar(heatmap)
-    # plt.title('Lambda 1')
-    # plt.show()
+    ####### EIGENVALUES VISUALISATION ###########
+    if VERBOSE:
+        fig, axis = plt.subplots()
+        heatmap = axis.pcolor(eigs[1, :, :], cmap=plt.cm.YlGn)
+        plt.scatter(GT_data[:, 0]+0.5, GT_data[:, 1]+0.5, color='r', linewidths=2.8)
+        plt.colorbar(heatmap)
+        plt.title('Eigenvalue 2')
+        plt.show()
 
     #
     # if VERBOSE:
@@ -126,9 +104,11 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
     # <here>
 
     if VERBOSE:
-        plt.imshow(R_b)
-        plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=0.3)
-        plt.title('GT in R_b')
+        fig, axis = plt.subplots()
+        heatmap = axis.pcolor(R_b, cmap=plt.cm.YlGn)
+        plt.scatter(GT_data[:, 0] + 0.5, GT_data[:, 1] + 0.5, color='r', linewidths=0.8)
+        plt.colorbar(heatmap)
+        plt.title('Blobness')
         plt.show()
 
     # calc grad of "Blobness field"
@@ -137,8 +117,8 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
         x, y = np.meshgrid(np.arange(blobness_grad.shape[1]), np.arange(blobness_grad.shape[0]))
         plt.quiver(x, y, -blobness_grad[:, :, 1], -blobness_grad[:, :, 0])
         plt.imshow(R_b, alpha=0.3)
-        plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=2.8)
-        plt.title('GT in RB with blobness grad')
+        plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=0.8)
+        plt.title('Blobness gradient')
         plt.show()
 
     ### CREATE PARTICLE LOCATIONS ON IMG ###
@@ -419,10 +399,11 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
 
     gt_to_particles = calc_dist_to_neares(GT_data, particles, n_neighbours=1, return_indexes=False)
     particles_to_gt = calc_dist_to_neares(particles, GT_data, n_neighbours=1, return_indexes=False)
-    visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='1', experiment_idx=experiment_idx,
-                  dice=result['dice_coeff_2'], iteration=30, save_dir='./examples/')
-    visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='2', experiment_idx=experiment_idx,
-                  dice=result['dice_coeff_2'], iteration=30, save_dir='./examples/')
+    if cur_config['save_best_result_visualisation']:
+        visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='1', experiment_idx=experiment_idx,
+                      dice=result['dice_coeff_2'], iteration=30, save_dir='./examples/')
+        visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='2', experiment_idx=experiment_idx,
+                      dice=result['dice_coeff_2'], iteration=30, save_dir='./examples/')
 
     result['time_spended'] = time.time() - t0
     return result, time_spended
@@ -446,15 +427,15 @@ if __name__ == '__main__':
     #               'n_particles_coeff': 2.0, 'metric_measure_freq': 10, 'n_particles': 52}
     cur_config = {'random_seed': 2022, 'lambda_dist': 1., 'lambda_blob': 0.,
                   'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 1,
-                  # 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
+                  'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
                   # 'region': {'x_min': 310, 'x_max': 328, 'y_min': 330, 'y_max': 345},
                   # 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
-                  'region': {'x_min': 0, 'x_max': 518, 'y_min': 0, 'y_max': 515},
-                  'boundary_size': {'x': 10, 'y': 10},
+                  # 'region': {'x_min': 0, 'x_max': 518, 'y_min': 0, 'y_max': 515},
+                  'boundary_size': {'x': 1, 'y': 1},
                   'gradient_type': 'np_grad',
                   'epoch_num': 10, 'n_particles_coeff': 1.0, 'metric_measure_freq': 1,
                   'step_mode': 'discrete',  # discrete or contin
-                  'blobness_formula': 'div_corrected',  # 'simple_div', 'custom', 'div_corrected'
+                  'blobness_formula': 'custom',  # 'simple_div', 'custom', 'div_corrected'
                   'write_gif': False,
                   'metric_algo': 'Chamfer',
                   'mu_dist_func': 5.84,

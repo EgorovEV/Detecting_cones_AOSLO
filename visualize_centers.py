@@ -14,7 +14,7 @@ plt.show()
 image = img.copy()
 for index, row in data.iterrows():
     # image, x_coord, y_coord -- from docs
-    cv2.circle(image, (round(row[0]),round(row[1])), radius=1, color=(0, 255, 255), thickness=-1)
+    cv2.circle(image, (round(row[0]),round(row[1])), radius=0, color=(255, 0, 0), thickness=-1)
 
 plt.imshow(image)
 plt.show()

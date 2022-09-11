@@ -75,26 +75,62 @@ if __name__ == '__main__':
     }
 
     VERBOSE = False
-    USE_WANDB = False
-    USE_WANDB_SWEEP = False
+    USE_WANDB = True
+    USE_WANDB_SWEEP = True
 
     if USE_WANDB_SWEEP:
-        config_default = {'random_seed': 2022, 'lambda_dist': 1., 'lambda_blob': 0.6,
-                          'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2,
-                          'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
-                          'boundary_size': {'x': 5, 'y': 5},
-                          'gradient_type': 'np_grad',
-                          'epoch_num': 100, 'n_particles_coeff': 1.0, 'metric_measure_freq': 1,
-                          'step_mode': 'contin',  # discrete or contin
-                          'blobness_formula': 'div_corrected',  # 'simple_div', 'custom', 'div_corrected'
-                          'write_gif': False,
-                          'metric_algo': 'Chamfer',
-                          'save_best_result_visualisation': False
-                          }
-        wandb.init(project="cones_AOSLO_sweep", config=config_default)
-        wandb_config = wandb.config
+        default_config = {'random_seed': 2022, 'lambda_dist': 1., 'lambda_blob': 0.,
+                      'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 1,
+                      # 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
+                      # 'region': {'x_min': 310, 'x_max': 328, 'y_min': 330, 'y_max': 345},
+                      # 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
+                      'region': {'x_min': 0, 'x_max': 518, 'y_min': 0, 'y_max': 515},
+                      'boundary_size': {'x': 10, 'y': 10},
+                      'gradient_type': 'np_grad',
+                      'epoch_num': 10, 'n_particles_coeff': 1.0, 'metric_measure_freq': 1,
+                      'step_mode': 'discrete',  # discrete or contin
+                      'blobness_formula': 'div_corrected',  # 'simple_div', 'custom', 'div_corrected'
+                      'write_gif': False,
+                      'metric_algo': 'Chamfer',
+                      'mu_dist_func': 5.84,
+                      'sigma_dist_func': 0.83,
+                      'lambda_dist_func': -0.1,
+                      'dist_energy_type': 'pit',
+                      'threshhold_dist_del': 3.5,
+                      'particle_call_window': 5,
+                      'particle_call_threshold': 0.1,
+                      'init_blob_threshold': 5.,
+                      'reception_field_size': 21,
+                      'fix_particles_frequency': 4,
+                      'verbose_func': VERBOSE,
+                      'save_best_result_visualisation': False
+                      }
 
-        find_blobs(wandb_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB)
+        print('Estimated num of variants:', estimate_num_variant(config_zoo))
+
+        results = []
+        experiment_idx = 0
+        run = wandb.init(project='cones_AOSLO_all_dataset', config=default_config)
+        cur_config = wandb.config
+
+        print('~~~~~~~~~~~~~' * 5)
+        print(cur_config)
+        print('~~~~~~~~~~~~~' * 5)
+
+        if cur_config['blobness_formula'] == 'div_corrected' and cur_config['init_blob_threshold'] > 1.:
+            run.finish()
+        if cur_config['blobness_formula'] == 'custom' and cur_config['init_blob_threshold'] < 1.:
+            run.finish()
+
+        try:
+            result, _ = find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, experiment_idx)
+
+            results.append(result)
+
+        except Exception as error_type:
+            print(traceback.format_exc())
+            print('error occured', error_type)
+
     else:
 
         print('Estimated num of variants:', estimate_num_variant(config_zoo))

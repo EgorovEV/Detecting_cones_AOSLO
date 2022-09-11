@@ -1,12 +1,11 @@
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import scipy
+from scipy import ndimage
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial import distance_matrix
-from scipy import ndimage
-import scipy
 from sklearn.neighbors import NearestNeighbors
-import time
 
 
 def np_sigmoid(x):
@@ -57,6 +56,17 @@ def calc_dist_energy(particles, n_neighbours, alpha, sigma):
 
     exp_resulting_vectors_modules = np.linalg.norm(exp_resulting_vectors, axis=1)
     return exp_resulting_vectors, exp_resulting_vectors_modules
+
+
+def dist_energy_func_paper(x, y, w=8.84, d=-0.1):
+    dist = np.sqrt((x ** 2.) + (y ** 2.))
+    if dist < w:
+        return 1 + ((3 * (d - 1) * dist) / w) - ((3 * (d - 1) * (dist ** 2)) / (w ** 2)) + ((d - 1) * (dist ** 3)) / (
+                    w ** 3)
+    elif dist > w and dist < 11.:
+        return d - ((2 * d * ((dist - w) ** 3)) / ((w - 1) ** 3)) - ((3 * d * ((dist - w) ** 2)) / ((w - 1) ** 2))
+    else:
+        return 0
 
 
 def energy_pit_func3(x, y, mu, sigma, lambda_):

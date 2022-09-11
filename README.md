@@ -14,6 +14,19 @@ To visualize all real AOSLO position:
 ```
 python visualize_centers.py
 ```
+
+To hyperparameter tuning, use
+```
+wandb sweep sweep_config_new.yaml 
+```
+plus: set USE_WANDB_SWEEP and USE_WANDB to True in pipeline_with_delitions.py.
+ 
+To write results to table use 
+```
+python pipeline_with_delitions.py
+```
+with USE_WANDB_SWEEP = False
+
 # Description
 ### Current algo
 1. calculate "blobness" measure using technique offered in [2] /  custom.

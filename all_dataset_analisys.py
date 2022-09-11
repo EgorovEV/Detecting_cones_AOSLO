@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import PIL
 import cv2
 import os
 import matplotlib.pyplot as plt
@@ -35,19 +34,10 @@ for image_name, one_image_particles in particles_location_all_dataset.items():
     distances_betw_particles[image_name] = calc_dist_to_neares(one_image_particles, one_image_particles, n_neighbours=2)[:, 1]
 
 
-# for image_name, one_image_particles in particles_location_all_dataset.items():
-#     plt.hist(distances_betw_particles[image_name],bins=10)
-#     plt.title("Img={}, Amount of particles={}".format(image_name, particles_amount[image_name]))
-#     plt.xlabel('Dist to neighbour')
-#     plt.ylabel('Amount')
-#     plt.show()
-
 
 np_distances_betw_particles = np.zeros((1))
 for dists in distances_betw_particles.values():
     np_distances_betw_particles = np.hstack((np_distances_betw_particles, np.array(dists)))
-# mean_dist = np.mean(np_distances_betw_particles)
-# var_dist = np.var(np_distances_betw_particles)
 
 factor = 1/70000.
 plt.hist(np_distances_betw_particles, bins=20,
@@ -84,7 +74,7 @@ def dist_energy_func_paper(r, w=8.84, d=-0.1):
         else:
             ans.append( 0 )
     ans=np.array(ans)
-    ans[ans<-1.] = 0.
+    # ans[ans<-1.] = 0.
     return ans
 
 

@@ -1,26 +1,15 @@
 import os
-import math
-import matplotlib.pyplot as plt
+
+import imageio
 import pandas as pd
 import skimage
 import wandb
-import imageio
-import time
-from PIL import Image
-from tqdm import tqdm
 
-# import torch
-# import torch.functional as F
-
-# import heartrate
-# heartrate.trace(browser=True)
-
-from utils import *
 from image_transformation import crop_image, mirror_padding_image
+from utils import *
 
 
 def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, experiment_idx=0):
-    # if cur_config[''] > 10:
 
     result = {
         'best_lsa_mean': +np.inf,
@@ -57,18 +46,10 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
     if VERBOSE:
         fig, axis = plt.subplots()
         heatmap = axis.pcolor(eigs[1, :, :], cmap=plt.cm.YlGn)
-        plt.scatter(GT_data[:, 0]+0.5, GT_data[:, 1]+0.5, color='r', linewidths=2.8)
+        plt.scatter(GT_data[:, 0] + 0.5, GT_data[:, 1] + 0.5, color='r', linewidths=2.8)
         plt.colorbar(heatmap)
         plt.title('Eigenvalue 2')
         plt.show()
-
-    #
-    # if VERBOSE:
-    #     x, y = np.meshgrid(np.arange(eigs[1, :, :].shape[1]), np.arange(eigs[1, :, :].shape[0]))
-    #     plt.quiver(x, y, eigs[1, :, :], eigs[1, :, :])
-    #     plt.imshow(eigs[1, :, :], alpha=0.3)
-    #     plt.scatter(GT_data[:,0], GT_data[:,1], color='r', linewidths=0.8)
-    #     plt.show()
 
     if VERBOSE:
         plt.imshow(img)
@@ -80,7 +61,6 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
         R_b = np.divide(np.abs(eigs[0, :, :]), np.abs(eigs[1, :, :]))
         threshold = 10.
         print(np.sum([R_b > threshold]))
-        ### need to think about outlier filtration -- they can send our far away
         R_b[R_b > threshold] = threshold
         R_b = R_b / threshold
 
@@ -99,9 +79,6 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
         assert (R_b > -0.0001).all()
     else:
         raise NotImplementedError
-
-    ### Normilize (now it's obligation, because we need to somehow has stable init treshold
-    # <here>
 
     if VERBOSE:
         fig, axis = plt.subplots()
@@ -132,19 +109,16 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
     while True:
         particles, idx_of_deleted_particles, is_stable_particle_index = \
             del_close_particles(particles, is_stable_particle_index, R_b, cur_config, threshold_dist=3)
-        # print(sum(idx_of_deleted_particles.values()))
         if sum(idx_of_deleted_particles.values()) == 0:
             break
 
     is_stable_particle_index = [1 for _ in range(particles.shape[0])]
 
-    # gravity_field = calc_gravity_field(img.shape, particles, cur_config)
     gravity_field = calc_gravity_field_optim(precomputed_dist_func_val, img.shape, particles, cur_config)
 
     if VERBOSE:
         x, y = np.meshgrid(np.arange(gravity_field.shape[1]), np.arange(gravity_field.shape[0]))
         plt.imshow(gravity_field, alpha=0.3)
-        # plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=0.8)
         plt.scatter(particles[:, 0], particles[:, 1], color='#000000', linewidths=0.8)
         plt.title('Initilised stabel particles in gravity field')
         plt.show()
@@ -152,9 +126,6 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
     particles, is_stable_particle_index = adding_particles(particles,
                                                            is_stable_particle_index,
                                                            gravity_field, img.shape, cur_config)
-    # if VERBOSE:
-    #     visualize(img, particles, GT_data, is_stable_particle_index,
-    #               is_save=True, img_name='start', save_dir='./examples/')
 
     time_spended = {
         'dist_energy_calc': 0.,
@@ -205,17 +176,12 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
                 continue
 
             if cur_config['step_mode'] == 'contin':
-                # change x position of particle
+                # Not supported scince july -- not optimal
                 dy = -1 * cur_config['lambda_blob'] * blobness_grad[int(particle[1])][int(particle[0])][0] + \
                      cur_config['lambda_dist'] * exp_resulting_vectors[particle_idx][0]
                 dx = -1 * cur_config['lambda_blob'] * blobness_grad[int(particle[1])][int(particle[0])][1] + \
                      cur_config['lambda_dist'] * exp_resulting_vectors[particle_idx][1]
-
-                #####
-                # a,b = dx,dy
-                # dx,dy=b,a
                 dy = -dy
-                #####
                 particle[0] += dx
                 particle[1] += dy
 
@@ -225,9 +191,6 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
                 delta_x = -1. * cur_config['lambda_blob'] * blobness_grad[int(particle[1])][int(particle[0])][1] + \
                           cur_config['lambda_dist'] * exp_resulting_vectors[particle_idx][1]
 
-                # delta_x, delta_y = delta_y, delta_x
-                # a, b = delta_x, delta_y
-                # delta_x, delta_y = b, a
                 delta_y = -delta_y
 
                 # print(delta_x, delta_y)
@@ -252,15 +215,7 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
         if iteration % cur_config['fix_particles_frequency'] == 3:
             is_stable_particle_index = [1 for _ in range(len(is_stable_particle_index))]
 
-            # gravity_field = calc_gravity_field(img.shape, particles, cur_config)
             gravity_field = calc_gravity_field_optim(precomputed_dist_func_val, img.shape, particles, cur_config)
-
-            # x, y = np.meshgrid(np.arange(gravity_field.shape[1]), np.arange(gravity_field.shape[0]))
-            # # plt.quiver(x, y, -blobness_grad[:, :, 1], -blobness_grad[:, :, 0], )
-            # plt.imshow(gravity_field, alpha=0.3)
-            # plt.scatter(GT_data[:, 0], GT_data[:, 1], color='r', linewidths=0.8)
-            # plt.scatter(particles[:, 0], particles[:, 1], color='#00FFFF', linewidths=0.8)
-            # plt.show()
 
             particles, is_stable_particle_index = adding_particles(particles,
                                                                    is_stable_particle_index,
@@ -393,16 +348,14 @@ def find_blobs(cur_config, GT_data, img, img_colorful, VERBOSE, USE_WANDB, exper
                 image = imageio.v2.imread('img_log/' + filename)
                 writer.append_data(image[:, :, :3])
 
-    # if VERBOSE:
-    #     visualize(img, particles, GT_data, is_save=True,
-    #               img_name='finish', save_dir='./examples/')
-
     gt_to_particles = calc_dist_to_neares(GT_data, particles, n_neighbours=1, return_indexes=False)
     particles_to_gt = calc_dist_to_neares(particles, GT_data, n_neighbours=1, return_indexes=False)
     if cur_config['save_best_result_visualisation']:
-        visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='1', experiment_idx=experiment_idx,
+        visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='1',
+                      experiment_idx=experiment_idx,
                       dice=result['dice_coeff_2'], iteration=30, save_dir='./examples/')
-        visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='2', experiment_idx=experiment_idx,
+        visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric='2',
+                      experiment_idx=experiment_idx,
                       dice=result['dice_coeff_2'], iteration=30, save_dir='./examples/')
 
     result['time_spended'] = time.time() - t0
@@ -414,17 +367,6 @@ if __name__ == '__main__':
     VERBOSE = False
     USE_WANDB = False
 
-    cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.01, 'dist_alpha': 0.3, 'dist_sigma': 0.3,
-                  'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
-                  'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 500,
-                  'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
-    # cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.1, 'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345}, 'boundary_size': {'x': 5, 'y': 5}, 'gradient_type': 'np_grad', 'epoch_num': 500, 'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
-    # cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.05, 'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 2, 'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345}, 'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 500, 'n_particles_coeff': 2.0, 'metric_measure_freq': 100, 'n_particles': 52}
-
-    # cur_config = {'random_seed': 2022, 'lambda_dist': 0.05, 'lambda_blob': 0.01, 'dist_alpha': 0.3, 'dist_sigma': 0.3,
-    #               'dist_n_neighbours': 2, 'region': {'x_min': 0, 'x_max': 518, 'y_min': 0, 'y_max': 515},
-    #               'boundary_size': {'x': 15, 'y': 15}, 'gradient_type': 'np_grad', 'epoch_num': 50,
-    #               'n_particles_coeff': 2.0, 'metric_measure_freq': 10, 'n_particles': 52}
     cur_config = {'random_seed': 2022, 'lambda_dist': 1., 'lambda_blob': 0.,
                   'dist_alpha': 0.3, 'dist_sigma': 0.3, 'dist_n_neighbours': 1,
                   'region': {'x_min': 300, 'x_max': 328, 'y_min': 320, 'y_max': 345},
@@ -434,7 +376,7 @@ if __name__ == '__main__':
                   'boundary_size': {'x': 1, 'y': 1},
                   'gradient_type': 'np_grad',
                   'epoch_num': 10, 'n_particles_coeff': 1.0, 'metric_measure_freq': 1,
-                  'step_mode': 'discrete',  # discrete or contin
+                  'step_mode': 'discrete',  # discrete
                   'blobness_formula': 'custom',  # 'simple_div', 'custom', 'div_corrected'
                   'write_gif': False,
                   'metric_algo': 'Chamfer',

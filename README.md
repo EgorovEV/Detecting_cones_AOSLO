@@ -40,10 +40,6 @@ with USE_WANDB_SWEEP = False
 9. repeat step 5-8 M-times, but step 5 only every N-run;
  
 
-### ToDo
-* Discuss particle-fixing mechnizm
-* Optimize
-
 
 # Papers:
 [1] Kindlmann et.al, 2009, "Sampling and Visualizing Creases with Scale-Space Particles", http://people.cs.uchicago.edu/~glk/ssp/

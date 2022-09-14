@@ -58,7 +58,7 @@ def calc_dist_energy(particles, n_neighbours, alpha, sigma):
     return exp_resulting_vectors, exp_resulting_vectors_modules
 
 
-def dist_energy_func_paper(x, y, w=8.84, d=-0.1):
+def dist_energy_func_paper(x, y, mu, sigma, lambda_, w=8.84, d=-0.1):
     dist = np.sqrt((x ** 2.) + (y ** 2.))
     if dist < w:
         return 1 + ((3 * (d - 1) * dist) / w) - ((3 * (d - 1) * (dist ** 2)) / (w ** 2)) + ((d - 1) * (dist ** 3)) / (
@@ -172,7 +172,7 @@ def visualize(img, particles, GT_data, is_save=False, img_name='test', save_dir=
 
 
 def visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, metric, experiment_idx, dice, iteration,
-                  save_dir='./examples/'):
+                  cur_config, img_shape, save_dir='./examples/'):
     plt.figure(figsize=(30, 30))
     plt.imshow(img)
     metric_2_dist_map = {'1': 1.42, '2': 2.83}
@@ -189,10 +189,13 @@ def visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, met
         if dist > metric_2_dist_map[metric]:
             FP_idx.append(gt_to_particles_idx)
 
+    particles_in_image, _ = get_particles_in_image(particles[tuple(FP_idx), :], cur_config, img_shape)
+
     print('len(FP_idx)=', len(FP_idx))
-    plt.scatter(GT_data[tuple(TP_idx), 0], GT_data[tuple(TP_idx), 1], color='g', linewidths=0.8)
-    plt.scatter(GT_data[tuple(FN_idx), 0], GT_data[tuple(FN_idx), 1], color='r', linewidths=0.8)
-    plt.scatter(particles[tuple(FP_idx), 0], particles[tuple(FP_idx), 1], color='#FFFFFF', linewidths=0.8)
+    plt.scatter(GT_data[tuple(TP_idx), 0], GT_data[tuple(TP_idx), 1], color='g', linewidths=2.8)
+    plt.scatter(GT_data[tuple(FN_idx), 0], GT_data[tuple(FN_idx), 1], color='r', linewidths=2.8)
+    # plt.scatter(particles[tuple(FP_idx), 0], particles[tuple(FP_idx), 1], color='#000000', linewidths=0.8)
+    plt.scatter(particles_in_image[:, 0], particles_in_image[:, 1], color='#FFFFFF', linewidths=2.8)
 
     plt.title("dice={}, iter={}".format(dice, iteration))
     plt.savefig(save_dir + '/best_in_{0}_exp_{1}.png'.format(metric, experiment_idx),
@@ -202,28 +205,10 @@ def visualize_all(img, GT_data, particles_to_gt, particles, gt_to_particles, met
 
 def visualize_colorful(img_colorful, particles, is_save=False, img_name='test', save_dir='./examples/'):
     pass
-    # image_particles = img_colorful.copy()
-    # for particle in particles:
-    #     # print((particle[0], particle[1]))
-    #     cv2.circle(image_particles, (round(particle[0]), round(particle[1])), radius=0, color=(0, 255, 255),
-    #                thickness=-1)
-    # if is_save:
-    #     cv2.imwrite(save_dir + img_name + '.jpg', image_particles)
-    # plt.imshow(image_particles)
-    # plt.show()
 
 
 def visualize_wandb(img_colorful, particles, color='r'):
     pass
-    # color_map = {'r': (255, 0, 0),
-    #              'g': (0, 255, 0),
-    #              'b': (0, 0, 255),
-    #              }
-    # image_particles = img_colorful.copy()
-    # for particle in particles:
-    #     cv2.circle(image_particles, (round(particle[0]), round(particle[1])), radius=1, color=color_map[color],
-    #                thickness=-1)
-    # return image_particles
 
 
 def calc_dist_to_neares(p_from, p_to, n_neighbours=1, return_indexes=False):
@@ -345,10 +330,6 @@ def calc_gravity_field_optim(precomputed_dist_forces_field, img_shape, particles
                                                                low_x_kernel:high_x_kernel],
                                                                gravity_field[low_y:high_y, low_x:high_x])
 
-    # if is_particle_here(particles, x, y):
-    #     gravity_field[y][x] = 1.
-    #     continue
-
     return gravity_field
 
 
@@ -394,17 +375,21 @@ def initialize_high_prop_location(blobness_values, init_blob_threshold, img_shap
     return particles
 
 
-def calc_acc_metrics(particles, GT_particles, gt_to_particles, particles_to_gt, cur_config):
+def calc_acc_metrics(particles, GT_particles, gt_to_particles, particles_to_gt, cur_config, img_shape):
     dist_threshods = {'1': 1.42, '2': 2.83}
 
     particles_metrics = {'1': {'TP': 0, 'FP': 0, 'FN': 0, 'dice': None, 'precision': None, 'recall': None, },
                          '2': {'TP': 0, 'FP': 0, 'FN': 0, 'dice': None, 'precision': None, 'recall': None, }}
 
-    # iterate over closest distances from particles to GT (shape: #GT)
+    filtered_particles, filtered_particles_idx = get_particles_in_image(particles, cur_config, img_shape)
+
     for dist_name, dist_threshod in dist_threshods.items():
+        # particles_to_gt shape: #GT
         particles_metrics[dist_name]['TP'] = np.sum([particles_to_gt <= dist_threshod])
         particles_metrics[dist_name]['FN'] = np.sum([particles_to_gt > dist_threshod])
-        particles_metrics[dist_name]['FP'] = np.sum([gt_to_particles > dist_threshod])
+        # particles_to_gt shape: #particles
+        gt_to_particles_in_image = gt_to_particles[filtered_particles_idx]
+        particles_metrics[dist_name]['FP'] = np.sum([gt_to_particles_in_image > dist_threshod])
 
     for dist_name, dist_threshod in dist_threshods.items():
         TP = particles_metrics[dist_name]['TP']
@@ -415,3 +400,19 @@ def calc_acc_metrics(particles, GT_particles, gt_to_particles, particles_to_gt, 
         particles_metrics[dist_name]['precision'] = TP / (TP + FP + 0.)
 
     return particles_metrics
+
+def get_particles_in_image(particles, cur_config, img_shape):
+    origin_img_borders = {'y': [cur_config['boundary_size']['y'], img_shape[0] - cur_config['boundary_size']['y']],
+                          'x': [cur_config['boundary_size']['x'], img_shape[1] - cur_config['boundary_size']['x']]}
+    filtered_particles, filtered_particles_idx = [], []
+    for particle_idx, particle in enumerate(particles):
+        x, y = particle[0], particle[1]
+        if origin_img_borders['x'][0] < x and x <  origin_img_borders['x'][1]:
+            if origin_img_borders['y'][0] < y and y < origin_img_borders['y'][1]:
+                filtered_particles.append(particle)
+                filtered_particles_idx.append(particle_idx)
+
+    filtered_particles = np.array(filtered_particles)
+    filtered_particles_idx = np.array(filtered_particles_idx)
+    print('==============================Edge condition diff:', len(filtered_particles) - len(particles))
+    return filtered_particles, filtered_particles_idx
